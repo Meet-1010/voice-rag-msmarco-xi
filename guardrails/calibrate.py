@@ -54,9 +54,11 @@ def sweep(pos: np.ndarray, neg: np.ndarray, target_fpr: float = TARGET_FPR):
     return best, rows
 
 
-def calibrate_relevance(cfg, embedder, retriever, n_pos: int, seed: int):
-    data_dir = ROOT / cfg["corpus"]["out_dir"]
-    queries = [json.loads(l) for l in (data_dir / "queries.jsonl").open(encoding="utf-8")]
+def calibrate_relevance(cfg, embedder, retriever, n_pos: int, seed: int, queries_file: Path):
+    # Must be the query set matching the *indexed* corpus. Calibrating "in-corpus"
+    # scores using queries whose passages were never indexed would measure misses
+    # as if they were hits and drag the threshold far too low.
+    queries = [json.loads(l) for l in queries_file.open(encoding="utf-8")]
     random.Random(seed).shuffle(queries)
     in_corpus = queries[:n_pos]
     ood = json.loads((data_dir / "ood_queries.json").read_text(encoding="utf-8"))["queries"]
@@ -83,15 +85,15 @@ def calibrate_relevance(cfg, embedder, retriever, n_pos: int, seed: int):
     }
 
 
-def calibrate_grounding(cfg, embedder, n_pairs: int, seed: int):
-    data_dir = ROOT / cfg["corpus"]["out_dir"]
+def calibrate_grounding(cfg, embedder, n_pairs: int, seed: int,
+                        queries_file: Path, corpus_file: Path):
     passages = {}
-    with (data_dir / "corpus.jsonl").open(encoding="utf-8") as fh:
+    with corpus_file.open(encoding="utf-8") as fh:
         for line in fh:
             d = json.loads(line)
             passages[d["passage_id"]] = d["text"]
 
-    queries = [json.loads(l) for l in (data_dir / "queries.jsonl").open(encoding="utf-8")]
+    queries = [json.loads(l) for l in queries_file.open(encoding="utf-8")]
     queries = [q for q in queries if q.get("answer") and q["relevant"]
                and q["relevant"][0] in passages]
     rng = random.Random(seed)
@@ -178,10 +180,19 @@ def main() -> None:
     ap.add_argument("--in-corpus", type=int, default=400)
     ap.add_argument("--pairs", type=int, default=300)
     ap.add_argument("--seed", type=int, default=17)
+    ap.add_argument("--queries-file", default=None,
+                    help="query set matching the indexed corpus (default data/queries.jsonl)")
+    ap.add_argument("--corpus-file", default=None)
     ap.add_argument("--write", action="store_true", help="write chosen thresholds into config.yaml")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(Path(args.config).read_text())
+    data_dir = ROOT / cfg["corpus"]["out_dir"]
+    queries_file = Path(args.queries_file) if args.queries_file else data_dir / "queries.jsonl"
+    corpus_file = Path(args.corpus_file) if args.corpus_file else data_dir / "corpus.jsonl"
+    for p in (queries_file, corpus_file):
+        if not p.exists():
+            raise SystemExit(f"missing {p}")
     embedder = Embedder(cfg["embedder"])
     store = VectorStore(cfg, ROOT)
     if not store.exists():
@@ -190,13 +201,13 @@ def main() -> None:
     bm25 = BM25Index.load(bm_path) if bm_path.exists() else BM25Index()
     retriever = HybridRetriever(cfg, store, bm25, embedder, ROOT)
 
-    print("calibrating relevance guard ...", flush=True)
-    rel = calibrate_relevance(cfg, embedder, retriever, args.in_corpus, args.seed)
+    print(f"calibrating relevance guard over {queries_file.name} ...", flush=True)
+    rel = calibrate_relevance(cfg, embedder, retriever, args.in_corpus, args.seed, queries_file)
     print(f"  chosen {rel['chosen']['threshold']:.3f} "
           f"(tpr {rel['chosen']['tpr']:.3f}, fpr {rel['chosen']['fpr']:.3f})")
 
     print("calibrating grounding guard ...", flush=True)
-    grd = calibrate_grounding(cfg, embedder, args.pairs, args.seed)
+    grd = calibrate_grounding(cfg, embedder, args.pairs, args.seed, queries_file, corpus_file)
     print(f"  similarity {grd['similarity']['chosen']['threshold']:.3f}, "
           f"overlap {grd['token_overlap']['chosen']['threshold']:.3f}")
 

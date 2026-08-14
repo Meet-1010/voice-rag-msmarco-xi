@@ -42,8 +42,11 @@ def pct(values: list[float]) -> dict:
     return out
 
 
-def load_queries(n: int, seed: int, repeat_rate: float = 0.0) -> list[dict]:
-    path = ROOT / "data" / "queries.jsonl"
+def load_queries(n: int, seed: int, repeat_rate: float = 0.0,
+                 path: Path | None = None) -> list[dict]:
+    # Must match the indexed corpus, otherwise most queries miss and the benchmark
+    # measures the refusal path rather than the retrieval path.
+    path = path or ROOT / "data" / "queries.jsonl"
     pool = [json.loads(l) for l in path.open(encoding="utf-8")]
     rng = random.Random(seed)
     rng.shuffle(pool)
@@ -187,9 +190,13 @@ def main() -> None:
     ap.add_argument("-n", "--queries", type=int, default=220)
     ap.add_argument("--seed", type=int, default=29)
     ap.add_argument("--repeat-rate", type=float, default=0.30)
+    ap.add_argument("--queries-file", default=None)
     ap.add_argument("--out", default=str(ROOT / "bench"))
     args = ap.parse_args()
 
+    qfile = Path(args.queries_file) if args.queries_file else ROOT / "data" / "queries.jsonl"
+    if not qfile.exists():
+        raise SystemExit(f"missing {qfile}")
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -197,17 +204,18 @@ def main() -> None:
     print("providers:", orc.providers.status())
     print(f"index: {orc.store.count():,} points")
 
-    warm_q = load_queries(WARMUP, args.seed + 999)
+    warm_q = load_queries(WARMUP, args.seed + 999, path=qfile)
     print(f"warming up ({WARMUP} runs, discarded) ...")
     run(orc, warm_q, use_cache=False)
     orc.cache.clear()
 
     print(f"cold run: {args.queries} queries, cache disabled ...")
-    cold_rows = run(orc, load_queries(args.queries, args.seed), use_cache=False)
+    cold_rows = run(orc, load_queries(args.queries, args.seed, path=qfile), use_cache=False)
 
     orc.cache.clear()
     print(f"warm run: {args.queries} queries, cache on, {args.repeat_rate:.0%} repeats ...")
-    warm_rows = run(orc, load_queries(args.queries, args.seed, args.repeat_rate), use_cache=True)
+    warm_rows = run(orc, load_queries(args.queries, args.seed, args.repeat_rate, path=qfile),
+                    use_cache=True)
 
     summaries = [summarize(cold_rows, "cold (no cache)"), summarize(warm_rows, "warm (cache on)")]
     payload = {
