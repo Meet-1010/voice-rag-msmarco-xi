@@ -36,12 +36,24 @@ CHUNK_DEPTH = 100  # chunks pulled before passage dedupe; must exceed max k comf
 
 
 def load_corpus(path: Path, limit: int | None) -> list[Passage]:
-    out = []
+    """Sample evenly across languages.
+
+    corpus.jsonl is written shard by shard, so a plain prefix of N lines is all
+    English and Hindi and contains no Gujarati at all - which silently drops a
+    third of the evaluation and makes the per-language columns meaningless.
+    """
+    by_lang: dict[str, list[Passage]] = {}
     with path.open(encoding="utf-8") as fh:
         for line in fh:
-            out.append(Passage.from_json(json.loads(line)))
-            if limit and len(out) >= limit:
-                break
+            p = Passage.from_json(json.loads(line))
+            by_lang.setdefault(p.lang, []).append(p)
+    if not limit:
+        return [p for ps in by_lang.values() for p in ps]
+
+    per_lang = max(1, limit // len(by_lang))
+    out: list[Passage] = []
+    for ps in by_lang.values():
+        out.extend(ps[:per_lang])
     return out
 
 
