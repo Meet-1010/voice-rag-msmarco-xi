@@ -4,18 +4,25 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    HF_HOME=/app/.cache/hf \
     OMP_NUM_THREADS=4
-
-WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Spaces run the container as uid 1000. Building the index as root leaves the
+# Qdrant storage directory unwritable, which fails at container start rather than
+# at build time - so everything below runs as the same user that serves traffic.
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH \
+    HF_HOME=/home/user/.cache/hf
+WORKDIR /home/user/app
 
-COPY . .
+COPY --chown=user:user requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+COPY --chown=user:user . .
 
 # Bake the encoder into the image. Downloading it on first request would put a
 # multi-second stall in front of the first user and wreck the P100 story.

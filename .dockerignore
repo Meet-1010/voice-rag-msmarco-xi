@@ -1,0 +1,19 @@
+.venv/
+.git/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+
+# The image builds its own index from data/corpus.deploy.jsonl; shipping a
+# locally-built one would bake in whatever strategy happened to be active.
+.qdrant/
+.artifacts/
+
+# Full corpus is dev-only, 45MB, and not what the Space indexes.
+data/corpus.jsonl
+data/queries.jsonl
+
+bench/results.json
+bench/latency.png
+.DS_Store
