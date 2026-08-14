@@ -1,0 +1,22 @@
+# No torch. Embeddings and reranking run on onnxruntime via fastembed, which keeps
+# the image around 400MB instead of ~2.5GB and gives faster CPU inference.
+fastapi==0.141.1
+uvicorn[standard]==0.52.3
+python-multipart==0.0.32
+pydantic==2.13.4
+PyYAML==6.0.3
+tenacity==9.1.4
+httpx==0.28.1
+orjson==3.11.9
+
+fastembed==0.8.0
+onnxruntime==1.28.0
+tokenizers==0.23.1
+qdrant-client==1.19.0
+rank-bm25==0.2.2
+numpy==2.5.2
+
+# Corpus build and benchmarking only; not needed to serve.
+pyarrow==25.0.1
+huggingface-hub==0.36.0
+matplotlib==3.11.1

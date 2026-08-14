@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+
+# Regenerable: `python data/build_corpus.py`. 45MB, no reason to version it.
+data/corpus.jsonl
+data/queries.jsonl
+
+# Regenerable: `python index/build_index.py`
+.qdrant/
+.artifacts/
+.cache/
+
+.DS_Store
+.pytest_cache/

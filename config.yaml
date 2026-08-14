@@ -1,0 +1,135 @@
+corpus:
+  repo: ai4bharat/MSMARCO-XI
+  # Validation split only. The train shards are ~3.5GB per language and buy us
+  # nothing for a demo corpus that has to fit in a free Space.
+  files:
+    - {path: validation/hinval.parquet, lang: hi}
+    - {path: validation/gujval.parquet, lang: gu}
+  # Every translation file repeats the same English passages, so take them once.
+  english_from: validation/hinval.parquet
+  max_passages_per_lang: 20000
+  min_passage_chars: 40
+  out_dir: data
+
+embedder:
+  model: intfloat/multilingual-e5-small
+  dim: 384
+  onnx_file: onnx/model.onnx
+  # e5 was trained with these asymmetric prefixes. Dropping them is the single
+  # most common way people silently lose recall with this model family.
+  query_prefix: "query: "
+  passage_prefix: "passage: "
+  batch_size: 64
+  threads: 4
+
+store:
+  path: .qdrant
+  collection: msmarco_xi
+  distance: Cosine
+  hnsw:
+    m: 24
+    ef_construct: 128
+    ef_search: 64
+
+retrieval:
+  top_k: 10
+  candidates: 40          # per-branch depth before fusion
+  rrf_k: 60
+  dense_weight: 1.0
+  sparse_weight: 0.9
+  rerank:
+    enabled: false        # costs ~40ms; see README latency table for both modes
+    model: Xenova/ms-marco-MiniLM-L-6-v2
+    top_n: 20
+
+chunking:
+  active: parent_child    # chosen from chunking/comparison.md, not by taste
+  # Sizes are calibrated to the measured corpus, not copied from a tutorial.
+  # MSMARCO-XI passages are already retrieval-sized: p50 is 72 tokens (en) / 87 (hi),
+  # p90 is 117 / 140. Textbook 256-512 token budgets never fire on this corpus and
+  # every strategy collapses to one chunk per passage. These budgets actually bite.
+  fixed:
+    size: 64
+  sliding:
+    size: 64
+    overlap: 16
+  recursive:
+    size: 96
+    overlap: 24
+  semantic:
+    # Cut at the largest ~22% of adjacent-sentence distances within each passage.
+    # A percentile rather than an absolute cosine, because absolute distances are
+    # not comparable across scripts under a multilingual encoder.
+    breakpoint_percentile: 78
+    min_sentences: 2
+    max_size: 128
+  parent_child:
+    child_size: 48
+    child_overlap: 12
+  indic_aware:
+    size: 96
+    overlap: 24
+
+cache:
+  enabled: true
+  similarity: 0.95
+  max_entries: 2048
+  ttl_seconds: 3600
+
+extractive:
+  # Fast path: if retrieval is confident and the passage contains a clean span,
+  # answer without touching an LLM.
+  enabled: true
+  min_score: 0.86            # min cosine on the top retrieved chunk
+  min_span_similarity: 0.80  # min cosine on the chosen sentence within it
+  max_span_chars: 400
+
+guardrails:
+  # These get overwritten by guardrails/calibrate.py. Values here are the
+  # calibrated output committed back, not guesses.
+  relevance:
+    min_top_score: 0.78
+    min_margin: 0.0
+  grounding:
+    min_similarity: 0.62
+    min_token_overlap: 0.18
+  input:
+    min_chars: 3
+    max_chars: 512
+    supported_langs: [en, hi, gu]
+
+llm:
+  provider_order: [groq, sarvam]
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    primary: llama-3.3-70b-versatile
+    fast: llama-3.1-8b-instant
+  sarvam:
+    base_url: https://api.sarvam.ai
+    model: sarvam-m
+  max_tokens: 320
+  temperature: 0.0
+
+stt:
+  provider: sarvam
+  model: saarika:v2.5
+  base_url: https://api.sarvam.ai
+
+budgets_ms:
+  # Per-stage ceilings. Blowing one degrades the request, it does not fail it.
+  guard_input: 10
+  cache: 15
+  embed: 60
+  retrieve: 80
+  rerank: 60
+  generate: 3000
+  guard_grounding: 60
+  core_total: 200         # the number the task actually scopes: embed -> answer
+
+circuit_breaker:
+  fail_threshold: 3
+  reset_seconds: 30
+
+api:
+  host: 0.0.0.0
+  port: 7860
