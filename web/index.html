@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Voice RAG · MSMARCO-XI</title>
-<link rel="stylesheet" href="/static/style.css">
+<!-- ?v= is bumped on asset changes; without it browsers serve a stale stylesheet
+     after a redeploy and the layout silently breaks. -->
+<link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
 <div class="shell">
@@ -91,6 +93,6 @@
   </section>
 
 </div>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=2"></script>
 </body>
 </html>
