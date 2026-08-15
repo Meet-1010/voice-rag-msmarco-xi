@@ -43,7 +43,12 @@ retrieval:
     top_n: 20
 
 chunking:
-  active: parent_child    # chosen from chunking/comparison.md, not by taste
+  # Chosen from chunking/comparison.md, not by taste. We expected parent_child to
+  # win and it came last (R@5 0.646). passage_native wins R@5 (0.801) and R@10
+  # (0.893) with the lowest search latency and the smallest index, because
+  # MSMARCO passages are already human-curated retrieval units - splitting them
+  # destroys information rather than sharpening it. See README for the analysis.
+  active: passage_native
   # Sizes are calibrated to the measured corpus, not copied from a tutorial.
   # MSMARCO-XI passages are already retrieval-sized: p50 is 72 tokens (en) / 87 (hi),
   # p90 is 117 / 140. Textbook 256-512 token budgets never fire on this corpus and

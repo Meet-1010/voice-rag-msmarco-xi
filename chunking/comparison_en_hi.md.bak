@@ -1,0 +1,19 @@
+# Chunking strategy comparison
+
+- Corpus: 15,000 MSMARCO-XI passages (en, hi)
+- Held-out queries: 300, sampled with seed 13
+- Encoder: `intfloat/multilingual-e5-small` (ONNX, CPU)
+- Scoring is passage-level after deduping chunks back to their source passage.
+- Retrieval is exact inner-product search, so the numbers isolate the chunker
+  rather than mixing in approximate-index recall.
+- Queries are filtered to their own language, matching production behaviour.
+
+| Strategy | Chunks | Chk/Psg | Mean tok | P95 tok | R@1 | R@5 | R@10 | MRR@10 | R@5 en | R@5 hi | Build s | Embed s | Search P50 ms | Index MB |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| recursive | 20,276 | 1.35 | 67 | 95 | 0.405 | **0.860** | 0.928 | 0.594 | 0.942 | 0.771 | 4.4 | 230.7 | 1.52 | 31 |
+| indic_aware | 20,177 | 1.35 | 67 | 95 | **0.412** | 0.856 | 0.922 | **0.596** | 0.935 | 0.771 | 15.9 | 212.9 | 0.94 | 31 |
+| passage_native | 15,146 | 1.01 | 86 | 149 | 0.375 | 0.855 | **0.942** | 0.578 | 0.943 | 0.760 | 1.7 | 586.1 | 1.31 | 23 |
+| semantic | 26,292 | 1.75 | 47 | 97 | 0.409 | 0.835 | 0.920 | 0.592 | 0.936 | 0.726 | 657.2 | 539.6 | 1.86 | 40 |
+| fixed | 28,442 | 1.90 | 46 | 64 | 0.395 | 0.820 | 0.900 | 0.578 | 0.926 | 0.705 | 1.7 | 138.6 | 1.98 | 44 |
+| sliding | 30,106 | 2.01 | 51 | 64 | 0.395 | 0.819 | 0.932 | 0.585 | 0.917 | 0.712 | 1.2 | 203.0 | 2.11 | 46 |
+| parent_child | 40,579 | 2.71 | 33 | 48 | 0.386 | 0.801 | 0.858 | 0.565 | 0.926 | 0.667 | 2.6 | 594.2 | 8.96 | 62 |
