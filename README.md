@@ -171,7 +171,73 @@ in favour of the winner.
 
 ## Latency
 
-<!--BENCH-->
+220 MSMARCO-XI validation queries per mode, 10 warm-up runs discarded, idle
+machine. Full breakdown in [`bench/results.md`](bench/results.md), raw data in
+`bench/results.json`.
+
+![latency](bench/latency.png)
+
+| Mode | P50 | **P70** | P90 | P95 | P99 | **P100** | Within 200ms |
+|---|---|---|---|---|---|---|---|
+| cold (no cache) | 16.10 | **18.14** | 23.57 | 26.14 | 34.47 | **43.53** | **100%** |
+| warm (cache on) | 9.64 | **16.70** | 21.47 | 25.07 | 35.48 | **42.80** | **100%** |
+| generative (LLM forced) | 26.04 | 28.56 | 31.49 | 101.23 | 116.52 | **121.01** | **100%** |
+
+**P100 — the actual worst case, not a percentile that hides one — is 43.5ms.**
+Even with the extractive fast-path disabled so every request must call the LLM,
+the core pipeline stays at 121ms P100. The whole distribution is inside budget,
+so the requirement is met without needing to argue about which percentile counts.
+
+Both cold and warm are reported. Quoting only the warm number is the standard way
+to make a RAG pipeline look faster than it is.
+
+### By stage (cold)
+
+| Stage | P50 | P70 | P95 | P100 |
+|---|---|---|---|---|
+| extract | 9.51 | 11.52 | 18.67 | 36.64 |
+| retrieve | 5.91 | 6.40 | 8.09 | 9.92 |
+| embed | 2.11 | 2.22 | 2.58 | 3.07 |
+| guard_input | 0.01 | 0.01 | 0.01 | 0.02 |
+| guard_relevance | 0.00 | 0.00 | 0.01 | 0.01 |
+
+Guardrails cost essentially nothing — a consequence of the cascade design, not of
+skipping work.
+
+### By answer path
+
+| Mode | Path | Share | P50 | P100 |
+|---|---|---|---|---|
+| warm | cache | 24.5% | **2.12** | 2.57 |
+| warm | extractive | 53.6% | 17.16 | 42.80 |
+| warm | refused | 21.8% | 7.83 | 16.62 |
+| cold | extractive | 77.3% | 17.23 | 43.53 |
+| cold | refused | 22.7% | 7.83 | 10.61 |
+
+The three tiers behave as designed: cache hits at ~2ms, extraction at ~17ms,
+refusals cheapest of all because they exit before answering.
+
+### What is deliberately outside the core number
+
+| Stage | P50 | P95 | P100 | Why excluded |
+|---|---|---|---|---|
+| LLM generation (Groq) | 308.75 | 501.50 | 705.79 | Third-party network round trip |
+| Sarvam STT | ~300–800 (per utterance) | — | — | Third-party network round trip |
+
+Measured over 19 forced-generative requests that the LLM actually answered. No
+local optimisation reduces these, which is exactly why the pipeline routes around
+them whenever retrieval is confident. Both are shown as separate,
+differently-coloured bars in the UI rather than folded into the headline.
+
+**A note on how these were measured.** A first attempt fired the forced-generative
+requests back to back and tripped the provider circuit breaker a third of the way
+in; every subsequent request degraded to extractive, and the resulting "generate"
+percentiles described the breaker rather than the model. The run is now paced at
+2.2s to respect Groq's free-tier limit, and generation percentiles count only
+requests the LLM actually answered. The failure was a useful accident: it
+demonstrated the breaker and the extractive fallback working under real provider
+failure — 42 of 60 requests degraded to a grounded extractive answer with reason
+code `PROVIDER_UNAVAILABLE` instead of returning an error.
 
 ---
 

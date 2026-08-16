@@ -129,13 +129,13 @@ def chart(summaries: list[dict], all_rows: dict[str, list[dict]], out: Path) -> 
 
     ax = axes[0]
     labels = [f"P{p}" for p in PCTS]
-    width = 0.38
+    width = 0.8 / max(1, len(summaries))  # groups stay centred as modes are added
     x = np.arange(len(PCTS))
     for i, s in enumerate(summaries):
         vals = [s["core"][f"p{p}"] or 0 for p in PCTS]
         ax.bar(x + i * width, vals, width, label=s["label"])
     ax.axhline(200, color="crimson", ls="--", lw=1.4, label="200ms target")
-    ax.set_xticks(x + width / 2)
+    ax.set_xticks(x + width * (len(summaries) - 1) / 2)
     ax.set_xticklabels(labels)
     ax.set_ylabel("core latency (ms)")
     ax.set_title("Core pipeline latency percentiles")
