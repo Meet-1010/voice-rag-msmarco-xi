@@ -30,7 +30,10 @@ RUN python -c "import yaml; from index.embedder import Embedder; \
     Embedder(yaml.safe_load(open('config.yaml'))['embedder'])"
 
 # Build the index at image build time so container start is just a process boot.
-RUN python index/build_index.py --corpus data/corpus.deploy.jsonl \
+# EMBED_THREADS is set high only for this step: embedding 18k chunks is the one
+# genuinely parallel part of the build, and the builder has more cores than the
+# runtime will. On a 1-vCPU builder this step alone blows a 45 minute deadline.
+RUN EMBED_THREADS=8 python index/build_index.py --corpus data/corpus.deploy.jsonl \
     && python -c "import json; print(json.load(open('.artifacts/manifest.json')))"
 
 EXPOSE 7860

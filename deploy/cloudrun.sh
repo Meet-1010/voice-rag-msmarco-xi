@@ -51,9 +51,11 @@ step "Enabling required APIs (idempotent, can take a minute)"
 
 step "Building image with Cloud Build"
 IMAGE="gcr.io/$PROJECT/$SERVICE"
-# 45m because the image builds the vector index at build time (embedding ~18k
-# chunks); the 10m default is not enough headroom on a small builder.
-"$GCLOUD" builds submit --tag "$IMAGE" --timeout=45m --project "$PROJECT"
+# The image embeds ~18k chunks at build time. On the default single-core builder
+# that step alone exceeded a 45 minute deadline; e2-highcpu-8 finishes it in a
+# couple of minutes and costs cents because the build is short.
+"$GCLOUD" builds submit --tag "$IMAGE" --timeout=45m \
+  --machine-type=e2-highcpu-8 --project "$PROJECT"
 
 step "Deploying to Cloud Run"
 ENV_ARGS="EMBED_THREADS=2"
