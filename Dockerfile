@@ -43,19 +43,9 @@ RUN if [ ! -f .artifacts/manifest.json ]; then \
       EMBED_THREADS=8 python index/build_index.py --corpus data/corpus.deploy.jsonl; \
     else echo "using prebuilt index"; fi
 
-# Fail at build time, not at 3am on a cold start: confirms the Qdrant storage
-# actually loads on this platform and that BM25 and the chunk map came along.
-RUN python -c "\
-import json, yaml, sys; \
-from index.store import VectorStore; \
-from pathlib import Path; \
-cfg = yaml.safe_load(open('config.yaml')); \
-s = VectorStore(cfg, Path('.')); \
-n = s.count(); \
-m = json.load(open('.artifacts/manifest.json')); \
-assert Path('.artifacts/bm25.pkl').exists(), 'bm25 index missing'; \
-assert n == m['chunks'], f'index has {n} points, manifest says {m[\"chunks\"]}'; \
-print(f'index verified: {n} points across {s.languages()}, strategy={m[\"strategy\"]}')"
+# Fail here rather than on a cold start in front of a user: confirms the shipped
+# storage actually loads on this platform and matches the manifest.
+RUN python deploy/verify_index.py
 
 EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \

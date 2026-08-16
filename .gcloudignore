@@ -15,3 +15,7 @@ data/corpus.jsonl
 data/queries.jsonl
 
 .DS_Store
+
+# Only needed when sparse fusion is enabled (sparse_weight > 0); 90MB otherwise,
+# and it slows the image pull on cold start. Regenerate with index/build_index.py.
+.artifacts/chunks.jsonl

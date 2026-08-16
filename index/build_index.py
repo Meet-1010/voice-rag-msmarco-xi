@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 from chunking.base import Passage  # noqa: E402
 from chunking.registry import NEEDS_EMBEDDER, build as build_chunker  # noqa: E402
 from index.bm25 import BM25Index  # noqa: E402
+from index.dense import DenseIndex  # noqa: E402
 from index.embedder import Embedder  # noqa: E402
 from index.store import VectorStore  # noqa: E402
 
@@ -72,6 +73,12 @@ def main() -> None:
     store.upsert(vecs, payloads)
     print(f"upserted {store.count():,} points across {store.languages()} "
           f"in {time.perf_counter()-t0:.1f}s")
+
+    # Serving read path. See index/dense.py for why search does not go through
+    # Qdrant at this corpus size.
+    t0 = time.perf_counter()
+    counts = DenseIndex.write(ROOT, vecs, payloads)
+    print(f"dense matrices written {counts} in {time.perf_counter()-t0:.1f}s")
 
     t0 = time.perf_counter()
     bm = BM25Index()

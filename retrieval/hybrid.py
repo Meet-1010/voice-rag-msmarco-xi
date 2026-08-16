@@ -24,6 +24,10 @@ class HybridRetriever:
         self.store = store
         self.bm25 = bm25
         self.embedder = embedder
+
+        from index.dense import DenseIndex
+        self.dense_index = DenseIndex(root)
+        self.search_backend = "numpy" if self.dense_index.available() else "qdrant"
         # Only the sparse branch resolves chunk_ids through this map, so with
         # sparse fusion disabled it is 90MB of resident memory and seconds of
         # startup for nothing.
@@ -36,6 +40,10 @@ class HybridRetriever:
                     self.by_chunk_id[d["chunk_id"]] = d
 
     def dense(self, q_vec: np.ndarray, lang: str | None, limit: int) -> list[dict]:
+        # Falls back to Qdrant when the dense matrices are absent (older index
+        # build), so the read path never depends on them existing.
+        if self.dense_index is not None and self.dense_index.available():
+            return self.dense_index.search(q_vec, limit, lang=lang)
         return self.store.search(q_vec, limit, lang=lang)
 
     def sparse(self, query: str, lang: str, limit: int) -> list[dict]:
