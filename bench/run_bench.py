@@ -33,8 +33,10 @@ WARMUP = 10
 
 
 def pct(values: list[float]) -> dict:
+    # n and mean are always present, including for the empty case: callers branch
+    # on out["n"] and a missing key there is a crash rather than a zero.
     if not values:
-        return {f"p{p}": None for p in PCTS}
+        return {**{f"p{p}": None for p in PCTS}, "mean": None, "n": 0}
     arr = np.array(values, dtype=np.float64)
     out = {f"p{p}": round(float(np.percentile(arr, p)), 2) for p in PCTS}
     out["mean"] = round(float(arr.mean()), 2)
@@ -60,9 +62,15 @@ def load_queries(n: int, seed: int, repeat_rate: float = 0.0,
     return picked
 
 
-def run(orc: Orchestrator, queries: list[dict], use_cache: bool) -> list[dict]:
+def run(orc: Orchestrator, queries: list[dict], use_cache: bool, delay: float = 0.0) -> list[dict]:
     rows = []
     for q in queries:
+        # Groq's free tier is rate limited per minute. Firing requests back to back
+        # trips the circuit breaker a third of the way in, after which every
+        # remaining request degrades to extractive and the measured generate
+        # latency describes the breaker rather than the model.
+        if delay:
+            time.sleep(delay)
         t0 = time.perf_counter()
         ans = orc.ask(q["query"], lang=q["lang"], use_cache=use_cache)
         wall = (time.perf_counter() - t0) * 1000
@@ -91,6 +99,12 @@ def summarize(rows: list[dict], label: str) -> dict:
         "n": len(rows),
         "core": pct(core),
         "total": pct(total),
+        # Reported apart from core: this is someone else's network, and folding it
+        # into the headline number is what makes latency claims dishonest.
+        # Only rows the LLM actually answered count - a request that tripped the
+        # breaker records a ~0ms generate span and would drag the percentile down.
+        "generate": pct([r["stages"]["generate"] for r in rows
+                         if r["path"] == "generative" and "generate" in r["stages"]]),
         "within_budget_pct": round(100 * sum(r["within_budget"] for r in rows) / max(1, len(rows)), 2),
         "by_path": {k: {**pct(v), "share_pct": round(100 * len(v) / len(rows), 1)}
                     for k, v in sorted(by_path.items())},
@@ -168,6 +182,16 @@ def to_markdown(summaries: list[dict]) -> str:
         lines.append(f"| {s['label']} | {c['p50']} | {c['p70']} | {c['p90']} | "
                      f"{c['p95']} | {c['p99']} | {c['p100']} | {s['within_budget_pct']}% |")
 
+    gen = next((s for s in summaries if s.get("generate", {}).get("n")), None)
+    if gen:
+        g = gen["generate"]
+        lines += [
+            f"\nThe LLM call itself, excluded from core above and measured over "
+            f"{g['n']} forced-generative requests: P50 **{g['p50']}ms**, P95 "
+            f"**{g['p95']}ms**, P100 **{g['p100']}ms**. This is a third-party "
+            "network round trip and no local optimisation reduces it, which is why "
+            "the pipeline routes around it whenever retrieval is confident.\n"]
+
     for s in summaries:
         lines += [f"\n## {s['label']} — by answer path\n",
                   "| Path | Share | P50 | P70 | P95 | P100 |", "|---|---|---|---|---|---|"]
@@ -191,6 +215,13 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=29)
     ap.add_argument("--repeat-rate", type=float, default=0.30)
     ap.add_argument("--queries-file", default=None)
+    # The extractive fast-path serves most in-corpus queries, so a normal run
+    # never exercises generation and the table would silently have no LLM row.
+    # This forces it so the generative cost is measured rather than assumed.
+    ap.add_argument("--generative", type=int, default=40,
+                    help="queries to run with the extractive path disabled (0 to skip)")
+    ap.add_argument("--generative-delay", type=float, default=2.2,
+                    help="seconds between generative calls; Groq free tier is ~30/min")
     ap.add_argument("--out", default=str(ROOT / "bench"))
     args = ap.parse_args()
 
@@ -218,6 +249,18 @@ def main() -> None:
                     use_cache=True)
 
     summaries = [summarize(cold_rows, "cold (no cache)"), summarize(warm_rows, "warm (cache on)")]
+    gen_rows: list[dict] = []
+    if args.generative and orc.providers.any_available():
+        print(f"generative run: {args.generative} queries, extractive path disabled, "
+              f"{args.generative_delay}s apart ...")
+        orc.cache.clear()
+        orc.extractive.enabled = False
+        for b in orc.providers.breakers.values():
+            b.record_success()  # clear any breaker tripped by the earlier runs
+        gen_rows = run(orc, load_queries(args.generative, args.seed + 7, path=qfile),
+                       use_cache=False, delay=args.generative_delay)
+        orc.extractive.enabled = True
+        summaries.append(summarize(gen_rows, "generative (LLM forced)"))
     payload = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "queries_per_mode": args.queries, "warmup_discarded": WARMUP,
@@ -227,10 +270,14 @@ def main() -> None:
         "summaries": summaries,
         "rows": {"cold": cold_rows, "warm": warm_rows},
     }
+    payload["rows"]["generative"] = gen_rows
     (out_dir / "results.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     md = to_markdown(summaries)
     (out_dir / "results.md").write_text(md, encoding="utf-8")
-    chart(summaries, {"cold": cold_rows, "warm": warm_rows}, out_dir / "latency.png")
+    series = {"cold": cold_rows, "warm": warm_rows}
+    if gen_rows:
+        series["generative"] = gen_rows
+    chart(summaries, series, out_dir / "latency.png")
     print("\n" + md)
 
 

@@ -1,78 +1,278 @@
 # Voice RAG over MSMARCO-XI
 
-Speak a question in English, Hindi or Gujarati; get an answer grounded in a
+Speak a question in English, Hindi or Gujarati. Get an answer grounded in a
 retrieved passage, with citations, a per-stage latency breakdown, and an explicit
 refusal when the corpus does not contain the answer.
 
 Built for HH Goa 2026 Shortlisting Task 2.
 
 ```
-🎤 audio ──► Sarvam STT ──► text + detected lang
+🎤 audio ──► Sarvam STT ──► transcript + detected language
                               │
                               ▼
                         [ guard_input ]  injection / unsafe / garbage / language
                               │
                               ▼
-                        [ embed ]  multilingual-e5-small, ONNX, CPU
+                        [ embed ]  multilingual-e5-small, ONNX, CPU, ~2.4ms
                               │
                     ┌─────────┴─────────┐
                     ▼                   │
-              [ cache ]  cos > 0.95 ────┼──► cached answer  (~2ms)
+              [ cache ]  cos > 0.95 ────┼──► cached answer      (~3ms)
                     │ miss              │
                     ▼                   │
               [ retrieve ]  Qdrant dense + BM25 sparse ──► RRF fusion
                     │                   │
                     ▼                   │
-              [ guard_relevance ]  top cosine < τ ──► REFUSE (OUT_OF_CORPUS)
+              [ guard_relevance ]  top cosine < τ(lang) ──► REFUSE OUT_OF_CORPUS
                     │                   │
                     ▼                   │
-              [ extract ]  confident span? ──────────► extractive answer (~15ms)
+              [ extract ]  confident answer span? ────────► extractive   (~25ms)
                     │ not confident     │
                     ▼                   │
               [ generate ]  Groq → Sarvam → extractive fallback
                     │                   │
                     ▼                   │
-              [ guard_grounding ]  similarity + token overlap
-                    │                   │        └─► REFUSE (UNGROUNDED_OUTPUT)
+              [ guard_grounding ]  overlap, escalating to embedding
+                    │                   │       └─► REFUSE UNGROUNDED_OUTPUT
                     ▼                   ▼
               answer + citations + full stage timings
 ```
 
 ---
 
+## Where each requirement lives
+
+| # | Requirement | Implementation |
+|---|---|---|
+| 1 | Speech-to-text (Sarvam or ElevenLabs) | `stt/sarvam.py` — Sarvam `saarika:v2.5`, auto language detection fed into the retrieval filter |
+| 2 | Chunking must be vast | `chunking/` — 7 strategies behind one ABC, benchmarked in `chunking/comparison.md` |
+| 3 | Under 200ms | Core pipeline measured per stage; see the latency section for what is and is not inside that budget |
+| 4 | P50 / P70 / P100 | `bench/run_bench.py` — 220 queries per mode, cold and warm, segmented by answer path |
+| 5 | Harness | `harness/` — Pydantic contracts, orchestrator state machine, provider chain, circuit breakers, JSON repair |
+| 6 | Guardrails | `guardrails/` — 4 layers, thresholds calibrated from labelled data in `guardrails/calibration.md` |
+
+---
+
 ## The 200ms question, answered honestly
 
-The task asks for "chunking + vector DB retrieval + everything through to final
-output" under 200ms. Two things are true at once, and this project reports both
-rather than picking the flattering one:
+The task scopes the target to "chunking + vector DB retrieval + everything through
+to final output". Two things are true at once, and this project reports both
+rather than the flattering one.
 
 **The core pipeline meets the target.** Embedding, hybrid retrieval, fusion, all
-four guardrails and extractive answering complete well inside 200ms — measured,
-not estimated. See the latency table below.
+four guardrails and extractive answering complete well inside 200ms.
 
 **A generative LLM round trip does not, and cannot.** Groq's time-to-first-token
-alone is 100-200ms over the network. Sarvam STT adds another ~150ms+. No amount of
-local optimisation changes someone else's network latency. Any submission claiming
-sub-200ms *including* a third-party LLM call is measuring something other than what
-it says.
+is 100–200ms over the network before it emits anything; Sarvam STT adds ~150ms+.
+No local optimisation changes someone else's network latency. Any submission
+claiming sub-200ms *including* a third-party LLM call is measuring something other
+than what it claims.
 
-So the pipeline is built to mostly not need the LLM:
+So the pipeline is built to mostly not need the LLM. Three tiers:
 
-| Path | What happens | Share of queries | Typical core latency |
+| Path | Mechanism | Core latency |
+|---|---|---|
+| Cache hit | Query embedding within 0.95 cosine of a previous query | ~3ms |
+| Extractive | Confident retrieval + a clean answer span in the passage | ~25ms |
+| Generative | Groq → Sarvam → extractive fallback | core stays low; the LLM call itself is 300–800ms and reported separately |
+
+The extractive fast-path is the substantive optimisation and it is not a trick:
+MSMARCO passages were selected by human annotators *because* they answer the
+query, so the answer span is usually present verbatim. Finding the right sentence
+costs one embedding pass over a handful of sentences. Calling a 70B model to
+paraphrase a sentence that is already correct is the thing worth avoiding.
+
+STT and generation are timed and reported as separate, differently-coloured bars
+in the UI and as separate rows in every table. They are never folded into the core
+number.
+
+### Three optimisations that came from measurement, not guesswork
+
+| Change | Before | After | Why |
 |---|---|---|---|
-| Cache hit | Query embedding matches a previous one above 0.95 cosine | see bench | ~2ms |
-| Extractive | Top passage is confidently retrieved and contains a clean answer span | see bench | ~15ms |
-| Generative | Falls through to Groq, then Sarvam, then extractive fallback | see bench | 400-600ms |
+| Partition vector index by language | 70ms | **9.9ms** | Embedded Qdrant walks payload filters in Python. Every query already knows its language, so the filter was pure cost. |
+| Cascade the grounding checks | 130ms | **0.2ms** | Token overlap is both the stronger discriminator and ~600x cheaper than the encoder. It decides the common case alone. |
+| Warm the encoder at startup | 2–3s first call | ~2.4ms | First ONNX inference pays graph-init cost. Paying it before the port opens keeps it out of P100. |
 
-The extractive fast-path is the substantive optimisation, and it is not a trick:
-MSMARCO passages were selected by human annotators *because* they answer the query,
-so the answer span is usually present verbatim. Locating the right sentence costs
-one embedding pass over a handful of sentences. Calling a 70B model to paraphrase a
-sentence that is already correct is the thing worth avoiding.
+---
 
-STT and generation are timed and reported as separate, differently-coloured bars in
-the UI and as separate rows in every results table. They are never folded into the
-core number.
+## Chunking — seven strategies, and the one the data chose
+
+| # | Strategy | What it does |
+|---|---|---|
+| 1 | `fixed` | Hard token cuts at a fixed stride — the baseline to beat |
+| 2 | `sliding` | Overlapping windows so answers straddling a boundary survive intact |
+| 3 | `recursive` | Paragraph → line → sentence → token, descending only when a piece still doesn't fit |
+| 4 | `semantic` | Embeds sentences, cuts at the largest adjacent-sentence distances |
+| 5 | `passage_native` | Treats each MSMARCO passage as atomic, enforcing only the encoder's token ceiling |
+| 6 | `parent_child` | Indexes small children, hands the parent passage to the generator |
+| 7 | `indic_aware` | Script detection, Devanagari/Gujarati danda rules, script recorded as metadata |
+
+Sizes are **calibrated to the measured corpus**, not copied from a tutorial. We
+measured the token distribution first:
+
+| Lang | mean | p50 | p90 | p99 | max | over 512 tok |
+|---|---|---|---|---|---|---|
+| en | 77.2 | 72 | 117 | 172 | 255 | 0% |
+| hi | 102.0 | 87 | 140 | 220 | 5734 | 0.36% |
+
+Two things fall out immediately. **Hindi costs ~32% more tokens than English for
+identical content** under this tokenizer, so any character-based budget produces
+wildly different real chunk sizes per language. And textbook 256–512 token budgets
+never fire on this corpus at all — every strategy would collapse to one chunk per
+passage and the comparison would be meaningless. The configured budgets (48–128
+tokens) are the ones that actually bite.
+
+### Results
+
+15,000→12,000 passages, 300 held-out queries with known relevant passages, all
+three languages, exact search. Full table in [`chunking/comparison.md`](chunking/comparison.md).
+
+| Strategy | R@1 | R@5 | R@10 | MRR@10 | R@5 en | R@5 hi | R@5 gu | Build | Search P50 | Index |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **passage_native** | 0.324 | **0.801** | **0.893** | 0.521 | 0.945 | 0.748 | **0.713** | 1.4s | **0.35ms** | **19MB** |
+| indic_aware | 0.323 | 0.766 | 0.853 | 0.507 | 0.914 | **0.766** | 0.612 | 2.5s | 0.57ms | 26MB |
+| recursive | 0.318 | 0.754 | 0.853 | 0.508 | 0.914 | 0.775 | 0.564 | 4.7s | 0.51ms | 27MB |
+| sliding | **0.344** | 0.739 | 0.882 | **0.524** | 0.875 | 0.739 | 0.601 | 1.4s | 0.76ms | 39MB |
+| semantic | 0.337 | 0.719 | 0.840 | 0.501 | 0.909 | 0.729 | 0.511 | **462s** | 0.70ms | 33MB |
+| fixed | 0.298 | 0.704 | 0.797 | 0.475 | 0.857 | 0.711 | 0.537 | 1.8s | 0.78ms | 37MB |
+| parent_child | 0.288 | 0.646 | 0.724 | 0.444 | 0.864 | 0.706 | 0.351 | 2.4s | 1.09ms | 54MB |
+
+**We chose `passage_native`, and it is not the answer we expected.** The plan this
+was built from assumed parent-child would win. It came last on every retrieval
+metric, produced the largest index, and was the slowest to search.
+
+The reason is specific to this corpus: MSMARCO passages are *already* human-curated
+retrieval units. Splitting them destroys information rather than sharpening it.
+parent_child's 33-token children are too small to retain a retrievable idea — and
+on Gujarati, where the tokenizer spends more tokens per unit of meaning, it
+collapses to **0.351** against passage_native's 0.713.
+
+Three further findings worth stating:
+
+- **`sliding` wins R@1 and MRR@10** while `passage_native` wins R@5 and R@10. We
+  optimise for R@5, because the generator receives the top 5 — but if the system
+  were purely extractive on top-1, `sliding` would be the defensible choice. The
+  metric you optimise has to follow from how the system consumes retrieval.
+- **`semantic` cost 462s of build time to finish 5th.** That is 330x
+  `passage_native`'s 1.4s for 8 points *less* R@5. Embedding-boundary detection is
+  a real technique, and on this corpus it is not worth its price.
+- **Gujarati is the hardest language everywhere** (0.351–0.713 vs English
+  0.857–0.945). This is a property of the encoder's coverage, and it propagates
+  into the guardrails below.
+
+**Scope note, stated plainly:** this result says MSMARCO-XI is pre-chunked, not
+that chunking doesn't matter. On raw documents — PDFs, transcripts, web pages —
+the ranking would almost certainly invert, which is exactly why all seven
+strategies remain in the codebase behind a config switch rather than being deleted
+in favour of the winner.
+
+---
+
+## Latency
+
+<!--BENCH-->
+
+---
+
+## Guardrails — knowing when not to answer
+
+Four layers, each with a machine-readable reason code surfaced in the API response
+and the UI.
+
+| Layer | Catches | Reason code |
+|---|---|---|
+| `input_guard` | Prompt injection, unsafe requests, empty/garbage transcripts, unsupported language | `PROMPT_INJECTION`, `UNSAFE_INPUT`, `EMPTY_INPUT`, `UNSUPPORTED_LANGUAGE` |
+| `relevance_guard` | Questions the corpus cannot answer | `OUT_OF_CORPUS`, `LOW_CONFIDENCE` |
+| `grounding_guard` | Answers not supported by retrieved text | `UNGROUNDED_OUTPUT` |
+| Citation enforcement | Individual invented sentences inside an otherwise grounded answer | (sentences stripped) |
+
+Refusal messages are written in the user's own language, because a Hindi speaker
+receiving an English refusal has been failed twice.
+
+### Thresholds are measured, not chosen
+
+`guardrails/calibrate.py` sweeps labelled in-corpus queries against a
+deliberately-constructed out-of-corpus set (`data/ood_queries.json`: local,
+personal, time-bound and self-referential questions) and writes
+`guardrails/thresholds.yaml`. Full report in
+[`guardrails/calibration.md`](guardrails/calibration.md).
+
+**Per-language, because a multilingual encoder's scores are not comparable across
+scripts:**
+
+| Lang | In-corpus mean | In p10 | OOD mean | OOD p90 | Separation | Threshold | TPR | FPR |
+|---|---|---|---|---|---|---|---|---|
+| en | 0.910 | 0.880 | 0.838 | 0.868 | **+0.011** | 0.867 | 96.4% | 10.0% |
+| hi | 0.896 | 0.858 | 0.846 | 0.863 | −0.005 | 0.871 | 83.6% | 6.2% |
+| gu | 0.869 | 0.844 | 0.844 | 0.862 | **−0.017** | 0.864 | 56.8% | 6.2% |
+
+English in-corpus queries sit ~0.04 above Gujarati ones while out-of-corpus scores
+sit at ~0.84 in every language. A single global threshold therefore over-refuses
+the lowest-resource language while being most permissive exactly where the encoder
+is weakest.
+
+**The honest limit:** separation is negative for Gujarati. Even with its own
+operating point the guard accepts only 56.8% of answerable Gujarati questions. The
+guard works well in English, acceptably in Hindi, and poorly in Gujarati. That is
+a real limitation of `multilingual-e5-small` on a lower-resource language, and no
+threshold choice fixes it — a stronger multilingual encoder would.
+
+### Grounding
+
+| Signal | Grounded mean | Ungrounded mean | Threshold | Keeps | Admits |
+|---|---|---|---|---|---|
+| Token overlap | 0.778 | 0.010 | 0.231 | 91.7% | **0.7%** |
+| Embedding similarity | 0.888 | 0.747 | 0.794 | 89.0% | 3.3% |
+
+Token overlap is the stronger signal *and* ~600x cheaper, so the checks cascade:
+overlap decides the common case; the encoder runs only when overlap says no, which
+is exactly the abstractive-paraphrase case where lexical overlap misleads.
+
+### Two mistakes this process caught
+
+Both are documented because the debugging is the interesting part:
+
+1. **Calibrating on the wrong distribution.** Thresholds were fit on
+   *(answer, single passage)* pairs but applied to *(answer, five-passage
+   concatenation)*. Concatenation dilutes similarity, and the guard began refusing
+   correct answers. Now scored per-passage and maxed, matching how it was fit.
+2. **A degenerate operating point.** Selecting "max TPR subject to FPR ≤ target"
+   collapses when classes separate cleanly — every threshold in the gap satisfies
+   the cap, so it returns the lowest one. It picked a token-overlap threshold of
+   **0.026**, which filters essentially nothing. Maximising Youden's J under the
+   cap gives **0.231**.
+
+A hypothesis that did **not** survive: score *margin* (top-1 minus the mean of the
+next four) was expected to separate in-corpus from out-of-corpus better than raw
+top-1. Measured over 400 in-corpus and 52 out-of-corpus queries, margin scores
+AUC **0.740** against top-1's **0.907**, and combining them beats neither. The
+simple signal won; `min_margin` remains configurable and off.
+
+---
+
+## Harness
+
+Not a try/except around an API call:
+
+- **Pydantic contracts** at every boundary — `AskRequest`, `Chunk`,
+  `RetrievalResult`, `Answer`, `StageTrace`
+- **Explicit state machine** in `harness/orchestrator.py`; every transition traced,
+  every stage under a timeout budget, every exit path producing the same response
+  envelope so clients never branch on shape
+- **Provider chain** Groq → Sarvam → extractive, each with its own circuit breaker
+  so one dead vendor doesn't slow requests the next could serve
+- **Structured output with a repair loop** — the model must return
+  `{answer, citations[], confidence}`; one repair attempt on parse failure, then
+  fall back to extractive
+- **Deliberately shallow retries** (2 attempts) — under a latency budget, a third
+  attempt is almost always worse for the user than failing over
+- **Tool-call surface** — `search_kb`, `rerank`, `answer_extractive`,
+  `answer_generative`, `refuse`, routed between rather than inlined
+
+**The system answers with zero API keys configured.** Retrieval and extraction are
+entirely local; the provider chain terminates in extractive answering rather than
+an error. That is a property of the design, not a fallback bolted on.
 
 ---
 
@@ -81,73 +281,62 @@ core number.
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+python data/build_corpus.py      # streams MSMARCO-XI -> data/corpus.jsonl
+python index/build_index.py      # -> .qdrant/, .artifacts/
+uvicorn api.main:app --port 7860
 ```
 
-Build the corpus and index (the corpus step streams from Hugging Face and takes a
-few minutes; a pre-built 18k-passage subset is committed for deployment):
+Keys are optional; copy `.env.example` to `.env` to enable voice
+(`SARVAM_API_KEY`) and generative answers (`GROQ_API_KEY`). Deployment steps are
+in [`DEPLOY.md`](DEPLOY.md).
 
-```bash
-python data/build_corpus.py          # -> data/corpus.jsonl, data/queries.jsonl
-python index/build_index.py          # -> .qdrant/, .artifacts/
-```
-
-Run it:
-
-```bash
-uvicorn api.main:app --port 7860     # open http://localhost:7860
-```
-
-API keys are optional and go in `.env` (see `.env.example`):
-
-- `SARVAM_API_KEY` — needed for `POST /ask-voice`. Text queries work without it.
-- `GROQ_API_KEY` — needed for generative answers. Without it the provider chain
-  terminates in extractive answering and the system still returns grounded
-  answers with citations.
-
-**The system answers with zero API keys configured.** That is a deliberate
-property of the provider chain, not an accident: retrieval and extraction are
-entirely local.
-
----
-
-## API
+### API
 
 | Route | Purpose |
 |---|---|
 | `POST /ask` | `{query, lang?, top_k?, use_cache?, allow_generative?}` → grounded answer |
-| `POST /ask-voice` | multipart audio → transcript + answer, with `stt_ms` reported separately |
+| `POST /ask-voice` | multipart audio → transcript + answer, `stt_ms` reported separately |
 | `GET /health` | index size, provider status, circuit-breaker state, cache stats |
-| `GET /metrics` | request counts by answer path, refusal counts, cache hit rate |
+| `GET /metrics` | counts by answer path, refusals, cache hit rate |
 
-Every response carries the same envelope whether it answered or refused, so
-clients never branch on shape:
+### Layout
 
-```json
-{
-  "answer": "...",
-  "citations": [{"chunk_id": "...", "passage_id": "en:1102432:3", "text": "...", "score": 0.91}],
-  "confidence": 0.88,
-  "path": "extractive",
-  "refused": false,
-  "reason_code": null,
-  "timings": {"stages": {"embed": 2.4, "retrieve": 8.1}, "core_ms": 14.2, "within_budget": true},
-  "trace": [{"stage": "guard_input", "duration_ms": 0.04, "ok": true}]
-}
+```
+chunking/     7 strategies behind one ABC + the evaluation harness
+index/        ONNX embedder, Qdrant store, BM25, ingestion CLI
+retrieval/    RRF fusion, semantic cache, extractive fast-path, optional rerank
+harness/      schemas, orchestrator, provider chain, tracing
+guardrails/   input / relevance / grounding guards, policy, calibration
+stt/          Sarvam speech-to-text
+api/ web/     FastAPI app and the frontend with the live latency HUD
+bench/        latency benchmark, percentiles, chart
+tests/        53 unit tests
 ```
 
 ---
 
-## Repository layout
+## Known limitations
 
-```
-chunking/     seven strategies behind one ABC, plus the evaluation harness
-index/        ONNX embedder, Qdrant store, BM25, ingestion CLI
-retrieval/    RRF fusion, semantic cache, extractive fast-path, optional rerank
-harness/      pydantic schemas, orchestrator state machine, provider chain, tracing
-guardrails/   input / relevance / grounding guards, refusal policy, calibration
-stt/          Sarvam speech-to-text
-api/          FastAPI app and routes
-web/          vanilla JS frontend with mic capture and live latency HUD
-bench/        latency benchmark, percentiles, chart
-tests/        51 unit tests over the invariants that matter
+- **Gujarati relevance gating is weak** (56.8% TPR). Quantified above rather than
+  hidden. A stronger multilingual encoder is the fix; `multilingual-e5-large` is
+  2.24GB and does not fit the free-tier footprint.
+- **The deployed index is an 18,024-passage subset** of the 60,022-passage corpus
+  the builder produces, so image builds stay reasonable. Benchmarks are run
+  against the same subset that is deployed, so the reported numbers describe the
+  live system rather than a larger local one.
+- **Cross-encoder reranking is off by default.** It costs 40–70ms and
+  `ms-marco-MiniLM` is English-only; running it on Devanagari produces confident
+  nonsense. It is behind a config flag and skipped for non-English queries.
+- **The semantic cache is per-process and in-memory.** Multiple workers would not
+  share it. Fine for a single-container deployment, wrong for horizontal scaling.
+- **`passage_native` winning is corpus-specific**, as discussed above.
+
+## Reproducing
+
+```bash
+python chunking/evaluate.py --limit 12000 --queries 300      # -> chunking/comparison.md
+python guardrails/calibrate.py --queries-file data/queries.deploy.jsonl \
+       --corpus-file data/corpus.deploy.jsonl --write        # -> guardrails/calibration.md
+python bench/run_bench.py -n 220 --queries-file data/queries.deploy.jsonl
+pytest tests/ -q
 ```
