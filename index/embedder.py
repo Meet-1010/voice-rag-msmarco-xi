@@ -7,6 +7,8 @@ for a free Space.
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 from fastembed import TextEmbedding
 from fastembed.common.model_description import ModelSource, PoolingType
@@ -38,9 +40,13 @@ class Embedder:
         self.batch_size = cfg.get("batch_size", 64)
         self._q_prefix = cfg.get("query_prefix", "")
         self._p_prefix = cfg.get("passage_prefix", "")
+        # Thread count has to match the vCPUs the host actually gives us.
+        # Oversubscribing costs more in contention than it gains in parallelism,
+        # and Cloud Run hands out 1-2 vCPU while a laptop has 8+.
+        threads = int(os.getenv("EMBED_THREADS") or cfg.get("threads") or 4)
         self._model = TextEmbedding(
             model_name=cfg["model"],
-            threads=cfg.get("threads"),
+            threads=threads,
             providers=["CPUExecutionProvider"],
         )
         self.warmup()

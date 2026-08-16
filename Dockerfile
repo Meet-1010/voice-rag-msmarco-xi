@@ -34,7 +34,9 @@ RUN python index/build_index.py --corpus data/corpus.deploy.jsonl \
     && python -c "import json; print(json.load(open('.artifacts/manifest.json')))"
 
 EXPOSE 7860
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s \
-    CMD curl -fsS http://localhost:7860/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
+    CMD curl -fsS http://localhost:${PORT:-7860}/health || exit 1
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Shell form so $PORT expands: Cloud Run, Render and Railway all inject their own
+# port and ignore EXPOSE. Falls back to 7860 for local and HF Spaces.
+CMD exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-7860}
