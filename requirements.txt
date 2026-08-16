@@ -1,5 +1,8 @@
+# Runtime only: serving plus building the index at image-build time.
 # No torch. Embeddings and reranking run on onnxruntime via fastembed, which keeps
-# the image around 400MB instead of ~2.5GB and gives faster CPU inference.
+# the image near 400MB instead of ~2.5GB and gives faster CPU inference.
+# Corpus building, charting and tests live in requirements-dev.txt so ~160MB of
+# pyarrow and matplotlib never reach the deployed image.
 fastapi==0.141.1
 uvicorn[standard]==0.52.3
 python-multipart==0.0.32
@@ -15,8 +18,3 @@ tokenizers==0.23.1
 qdrant-client==1.19.0
 rank-bm25==0.2.2
 numpy==2.5.2
-
-# Corpus build and benchmarking only; not needed to serve.
-pyarrow==25.0.1
-huggingface-hub==0.36.0
-matplotlib==3.11.1

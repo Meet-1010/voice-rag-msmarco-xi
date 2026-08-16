@@ -1,0 +1,7 @@
+# Corpus building, benchmarking and tests. Not installed in the deployed image.
+-r requirements.txt
+
+pyarrow==25.0.1          # streaming the MSMARCO-XI parquet shards
+huggingface-hub==0.36.0  # dataset download (fastembed pulls this in anyway)
+matplotlib==3.11.1       # bench/latency.png
+pytest==9.1.1

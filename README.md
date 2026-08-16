@@ -280,7 +280,7 @@ an error. That is a property of the design, not a fallback bolted on.
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # runtime deps are in requirements.txt
 python data/build_corpus.py      # streams MSMARCO-XI -> data/corpus.jsonl
 python index/build_index.py      # -> .qdrant/, .artifacts/
 uvicorn api.main:app --port 7860
