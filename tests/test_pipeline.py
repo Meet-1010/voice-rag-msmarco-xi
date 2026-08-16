@@ -255,6 +255,34 @@ def test_grounding_token_overlap_separates_grounded_from_invented():
     assert invented < 0.2
 
 
+def test_grounding_scores_against_best_passage_not_the_concatenation():
+    """Regression: scoring against "\\n".join(contexts) diluted a grounded answer
+    with unrelated passages and refused correct output."""
+    from guardrails.grounding_guard import GroundingGuard
+    guard = GroundingGuard(CFG, FakeEmbedder())
+    contexts = [
+        "Mount Everest is the highest mountain above sea level.",
+        "The vitreous cavity is a jellylike transparent chamber of the eyeball.",
+        "Sulfasalazine is used to treat rheumatoid arthritis.",
+    ]
+    answer = "The vitreous cavity is a transparent jellylike chamber of the eyeball."
+    code, metrics = guard.check(answer, contexts)
+    assert code is None, f"grounded answer was refused: {metrics}"
+    # Supported by one passage, so the cheap check settles it without embedding.
+    assert metrics["escalated"] is False
+
+
+def test_grounding_still_refuses_invented_answer():
+    from guardrails.grounding_guard import GroundingGuard
+    guard = GroundingGuard(CFG, FakeEmbedder())
+    contexts = ["The vitreous cavity is a jellylike chamber of the eyeball."]
+    code, metrics = guard.check(
+        "Napoleon Bonaparte was crowned emperor of France in 1804.", contexts)
+    assert code is ReasonCode.UNGROUNDED_OUTPUT
+    # Low overlap must escalate to the semantic check before refusing.
+    assert metrics["escalated"] is True
+
+
 def test_citation_enforcement_strips_unsupported_sentence():
     from guardrails.grounding_guard import GroundingGuard
     guard = GroundingGuard(CFG, FakeEmbedder())

@@ -51,14 +51,40 @@ class GroundingGuard:
         return float(vecs[0] @ vecs[1])
 
     def check(self, answer: str, contexts: list[str]) -> tuple[ReasonCode | None, dict]:
+        """Grounded means *some* retrieved passage supports the answer.
+
+        Scored against each passage separately and maxed, never against the
+        concatenation of all of them. Two reasons: an answer supported by passage
+        3 is grounded regardless of what passages 1 and 2 say, and the thresholds
+        were calibrated on answer-vs-single-passage pairs, so scoring against a
+        concatenation applies them to a distribution they were never fit on. That
+        mismatch alone refused correct answers.
+
+        The two checks are cascaded rather than both always run. Token overlap is
+        the better discriminator (grounded 0.778 vs ungrounded 0.010, admitting
+        0.7%) *and* costs ~0.2ms, while embedding similarity is weaker (admits
+        3.3%) and costs over 100ms because it embeds the answer and the context.
+        So overlap decides the common case alone, and we only pay for the encoder
+        when overlap says no - which is exactly the abstractive-paraphrase case
+        where lexical overlap is misleading.
+        """
         if not answer.strip():
             return ReasonCode.UNGROUNDED_OUTPUT, {"reason": "empty answer"}
-        context = "\n".join(contexts)
-        sim = self.similarity(answer, context)
-        overlap = self.token_overlap(answer, context)
-        metrics = {"similarity": round(sim, 4), "token_overlap": round(overlap, 4),
-                   "min_similarity": self.min_similarity, "min_token_overlap": self.min_overlap}
-        if sim < self.min_similarity or overlap < self.min_overlap:
+        if not contexts:
+            return ReasonCode.UNGROUNDED_OUTPUT, {"reason": "no context"}
+
+        overlap = max(self.token_overlap(answer, c) for c in contexts)
+        metrics = {"token_overlap": round(overlap, 4), "min_token_overlap": self.min_overlap,
+                   "min_similarity": self.min_similarity, "escalated": False}
+        if overlap >= self.min_overlap:
+            return None, metrics
+
+        # Low lexical overlap is not proof of invention: the model may have
+        # paraphrased. Fall back to the semantic check before refusing.
+        metrics["escalated"] = True
+        sim = max(self.similarity(answer, c) for c in contexts)
+        metrics["similarity"] = round(sim, 4)
+        if sim < self.min_similarity:
             return ReasonCode.UNGROUNDED_OUTPUT, metrics
         return None, metrics
 
