@@ -36,7 +36,19 @@ retrieval:
   candidates: 40          # per-branch depth before fusion
   rrf_k: 60
   dense_weight: 1.0
-  sparse_weight: 0.9
+  # Measured, not assumed. Sweeping this over 300 held-out queries on the 60k
+  # index: 0.0 -> R@1 0.360 / R@5 0.713 / MRR 0.509; 0.15 -> 0.353 / 0.720 /
+  # 0.508; 0.90 -> 0.283 / 0.693 / 0.453. BM25 fusion actively degrades ranking
+  # on this corpus and costs 11.6ms of the latency budget to do it.
+  #
+  # Why: MSMARCO queries are natural language, e5 already handles them well, and
+  # BM25 has no stemming or morphological handling for Devanagari and Gujarati,
+  # so its candidates displace better dense hits during fusion. Hybrid retrieval
+  # is not automatically better than dense.
+  #
+  # The sparse index is still built and still wired in - raise this above 0 for a
+  # corpus with rare literal tokens (SKUs, part numbers) where BM25 does earn it.
+  sparse_weight: 0.0
   rerank:
     enabled: false        # costs ~40ms; see README latency table for both modes
     model: Xenova/ms-marco-MiniLM-L-6-v2

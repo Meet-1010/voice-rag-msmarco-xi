@@ -24,9 +24,12 @@ class HybridRetriever:
         self.store = store
         self.bm25 = bm25
         self.embedder = embedder
-        self.by_chunk_id = {}
+        # Only the sparse branch resolves chunk_ids through this map, so with
+        # sparse fusion disabled it is 90MB of resident memory and seconds of
+        # startup for nothing.
+        self.by_chunk_id: dict[str, dict] = {}
         meta = root / ".artifacts" / "chunks.jsonl"
-        if meta.exists():
+        if self.w_sparse > 0 and meta.exists():
             with meta.open(encoding="utf-8") as fh:
                 for line in fh:
                     d = json.loads(line)
@@ -36,6 +39,8 @@ class HybridRetriever:
         return self.store.search(q_vec, limit, lang=lang)
 
     def sparse(self, query: str, lang: str, limit: int) -> list[dict]:
+        if self.w_sparse <= 0:
+            return []
         out = []
         for cid, score in self.bm25.search(query, lang, limit):
             row = self.by_chunk_id.get(cid)
