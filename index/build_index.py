@@ -59,7 +59,7 @@ def main() -> None:
     print(f"embedded in {time.perf_counter()-t0:.1f}s ({len(chunks)/(time.perf_counter()-t0):.0f} chunks/s)")
 
     store = VectorStore(cfg, ROOT)
-    store.recreate()
+    store.recreate(sorted({c.lang for c in chunks}))
     payloads = [{
         "chunk_id": c.chunk_id, "passage_id": c.passage_id, "doc_id": c.doc_id,
         "lang": c.lang, "text": c.text,
@@ -69,8 +69,9 @@ def main() -> None:
     } for c in chunks]
 
     t0 = time.perf_counter()
-    store.upsert(list(range(len(chunks))), vecs, payloads)
-    print(f"upserted {store.count():,} points in {time.perf_counter()-t0:.1f}s")
+    store.upsert(vecs, payloads)
+    print(f"upserted {store.count():,} points across {store.languages()} "
+          f"in {time.perf_counter()-t0:.1f}s")
 
     t0 = time.perf_counter()
     bm = BM25Index()
