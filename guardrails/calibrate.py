@@ -21,6 +21,7 @@ import argparse
 import json
 import random
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -35,13 +36,21 @@ from index.embedder import Embedder  # noqa: E402
 from index.store import VectorStore  # noqa: E402
 from retrieval.hybrid import HybridRetriever  # noqa: E402
 
-TARGET_FPR = 0.05
+# Cost is asymmetric but not unboundedly so. Answering an out-of-corpus question
+# is the worse failure, yet a guard that refuses half of all answerable questions
+# is not "safe", it is broken. We cap false-accepts here and then balance.
+TARGET_FPR = 0.10
 
 
 def sweep(pos: np.ndarray, neg: np.ndarray, target_fpr: float = TARGET_FPR):
-    """Return (chosen_threshold, rows). Chosen point is the highest recall that
-    still holds false-accepts at or under target_fpr; falls back to Youden's J when
-    no threshold is that clean."""
+    """Return (chosen_threshold, rows).
+
+    Among thresholds holding false-accepts at or under target_fpr, take the one
+    maximising Youden's J. Maximising TPR instead - the obvious first choice -
+    degenerates whenever the two classes separate cleanly: every threshold in the
+    gap satisfies the FPR cap, so it returns the lowest one, which sits at the
+    very bottom of the gap and filters almost nothing.
+    """
     grid = np.unique(np.round(np.concatenate([pos, neg]), 3))
     rows = []
     for t in grid:
@@ -49,8 +58,8 @@ def sweep(pos: np.ndarray, neg: np.ndarray, target_fpr: float = TARGET_FPR):
         fpr = float((neg >= t).mean())
         rows.append({"threshold": float(t), "tpr": tpr, "fpr": fpr, "youden": tpr - fpr})
 
-    ok = [r for r in rows if r["fpr"] <= target_fpr]
-    best = max(ok, key=lambda r: r["tpr"]) if ok else max(rows, key=lambda r: r["youden"])
+    pool = [r for r in rows if r["fpr"] <= target_fpr] or rows
+    best = max(pool, key=lambda r: (round(r["youden"], 4), -r["threshold"]))
     return best, rows
 
 
@@ -61,27 +70,49 @@ def calibrate_relevance(cfg, embedder, retriever, n_pos: int, seed: int, queries
     queries = [json.loads(l) for l in queries_file.open(encoding="utf-8")]
     random.Random(seed).shuffle(queries)
     in_corpus = queries[:n_pos]
-    ood = json.loads((data_dir / "ood_queries.json").read_text(encoding="utf-8"))["queries"]
+    ood_path = queries_file.parent / "ood_queries.json"
+    ood = json.loads(ood_path.read_text(encoding="utf-8"))["queries"]
 
     def top_scores(items):
-        out = []
-        texts = [i["query"] for i in items]
-        vecs = embedder.queries(texts)
+        scores, langs = [], []
+        vecs = embedder.queries([i["query"] for i in items])
         for item, vec in zip(items, vecs):
             hits = retriever.search(item["query"], vec, lang=item["lang"], top_k=10)
-            out.append(max((h.get("dense_score", 0.0) for h in hits), default=0.0))
-        return np.array(out, dtype=np.float32)
+            scores.append(max((h.get("dense_score", 0.0) for h in hits), default=0.0))
+            langs.append(item["lang"])
+        return np.array(scores, dtype=np.float32), np.array(langs)
 
-    pos = top_scores(in_corpus)
-    neg = top_scores(ood)
+    pos, pos_lang = top_scores(in_corpus)
+    neg, neg_lang = top_scores(ood)
     best, rows = sweep(pos, neg)
+
+    # A multilingual encoder does not produce comparable score distributions across
+    # scripts: English in-corpus queries sit ~0.04 higher than Gujarati ones while
+    # the out-of-corpus scores barely move. One global threshold therefore
+    # over-refuses the lowest-resource language and under-refuses English.
+    per_lang = {}
+    for lang in sorted(set(pos_lang) | set(neg_lang)):
+        p, n = pos[pos_lang == lang], neg[neg_lang == lang]
+        if len(p) < 20 or len(n) < 5:
+            continue
+        lb, _ = sweep(p, n)
+        # str() because these come out of a numpy array as np.str_, which yaml
+        # refuses to serialise.
+        per_lang[str(lang)] = {
+            "threshold": lb["threshold"], "tpr": lb["tpr"], "fpr": lb["fpr"],
+            "n_pos": int(len(p)), "n_neg": int(len(n)),
+            "in_mean": float(p.mean()), "in_p10": float(np.percentile(p, 10)),
+            "ood_mean": float(n.mean()), "ood_p90": float(np.percentile(n, 90)),
+            "separation": float(np.percentile(p, 10) - np.percentile(n, 90)),
+        }
+
     return {
         "n_in_corpus": len(pos), "n_out_of_corpus": len(neg),
         "in_corpus": {"mean": float(pos.mean()), "p05": float(np.percentile(pos, 5)),
                       "p50": float(np.percentile(pos, 50))},
         "out_of_corpus": {"mean": float(neg.mean()), "p95": float(np.percentile(neg, 95)),
                           "p50": float(np.percentile(neg, 50))},
-        "chosen": best, "curve": rows,
+        "chosen": best, "curve": rows, "per_lang": per_lang,
     }
 
 
@@ -154,6 +185,27 @@ def to_markdown(rel: dict, grd: dict) -> str:
         mark = " **<- chosen**" if abs(r["threshold"] - c["threshold"]) < 1e-9 else ""
         lines.append(f"| {r['threshold']:.3f} | {r['tpr']*100:.1f}% | {r['fpr']*100:.1f}%{mark} |")
 
+    if rel.get("per_lang"):
+        lines += [
+            "\n### Per-language thresholds\n",
+            "multilingual-e5 scores are not comparable across scripts. In-corpus "
+            "English queries sit well above the out-of-corpus band; Gujarati barely "
+            "clears it. A single global threshold over-refuses the lowest-resource "
+            "language, so each gets its own operating point.\n",
+            "| Lang | In-corpus mean | In p10 | OOD mean | OOD p90 | Separation | Threshold | TPR | FPR |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for lg, v in rel["per_lang"].items():
+            lines.append(
+                f"| {lg} | {v['in_mean']:.3f} | {v['in_p10']:.3f} | {v['ood_mean']:.3f} | "
+                f"{v['ood_p90']:.3f} | {v['separation']:+.3f} | **{v['threshold']:.3f}** | "
+                f"{v['tpr']*100:.1f}% | {v['fpr']*100:.1f}% |")
+        lines.append(
+            "\n`Separation` is in-corpus p10 minus out-of-corpus p90: positive means the "
+            "two distributions are cleanly apart at those quantiles. It is comfortably "
+            "positive for English and negative for Gujarati, which is the honest limit of "
+            "this guard on the lowest-resource language rather than something to paper over.\n")
+
     s, o = grd["similarity"], grd["token_overlap"]
     lines += [
         "\n## Grounding guard (UNGROUNDED_OUTPUT)\n",
@@ -218,18 +270,25 @@ def main() -> None:
     print(f"wrote {out_dir/'calibration.md'}")
 
     if args.write:
-        text = Path(args.config).read_text()
-        text = text.replace(
-            f"min_top_score: {cfg['guardrails']['relevance']['min_top_score']}",
-            f"min_top_score: {rel['chosen']['threshold']:.3f}")
-        text = text.replace(
-            f"min_similarity: {cfg['guardrails']['grounding']['min_similarity']}",
-            f"min_similarity: {grd['similarity']['chosen']['threshold']:.3f}")
-        text = text.replace(
-            f"min_token_overlap: {cfg['guardrails']['grounding']['min_token_overlap']}",
-            f"min_token_overlap: {grd['token_overlap']['chosen']['threshold']:.3f}")
-        Path(args.config).write_text(text)
-        print("config.yaml updated with calibrated thresholds")
+        # Written to a sidecar rather than edited into config.yaml: the values are
+        # generated output, and string-patching a hand-commented YAML file is how
+        # you eventually corrupt it.
+        out = {
+            "_generated_by": "guardrails/calibrate.py",
+            "_generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "_index": {"queries": queries_file.name, "corpus": corpus_file.name},
+            "relevance": {
+                "default": round(rel["chosen"]["threshold"], 3),
+                "per_lang": {l: round(v["threshold"], 3) for l, v in rel["per_lang"].items()},
+            },
+            "grounding": {
+                "min_similarity": round(grd["similarity"]["chosen"]["threshold"], 3),
+                "min_token_overlap": round(grd["token_overlap"]["chosen"]["threshold"], 3),
+            },
+        }
+        (out_dir / "thresholds.yaml").write_text(
+            yaml.safe_dump(out, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        print(f"wrote {out_dir/'thresholds.yaml'} (loaded at startup, overrides config.yaml)")
 
 
 if __name__ == "__main__":

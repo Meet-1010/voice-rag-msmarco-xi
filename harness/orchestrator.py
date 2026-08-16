@@ -150,7 +150,7 @@ class Orchestrator:
                 hits = self.reranker.rerank(query, hits, lang)
 
         with trace.span("guard_relevance"):
-            code, detail, top_score = self.relevance_guard.check(hits)
+            code, detail, top_score = self.relevance_guard.check(hits, lang)
         if code:
             return self._refuse(code, lang, trace, detail)
 

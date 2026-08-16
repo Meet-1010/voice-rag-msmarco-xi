@@ -1,0 +1,14 @@
+_generated_by: guardrails/calibrate.py
+_generated_at: '2026-08-16T11:17:10'
+_index:
+  queries: queries.deploy.jsonl
+  corpus: corpus.deploy.jsonl
+relevance:
+  default: 0.867
+  per_lang:
+    en: 0.867
+    gu: 0.864
+    hi: 0.871
+grounding:
+  min_similarity: 0.794
+  min_token_overlap: 0.231
