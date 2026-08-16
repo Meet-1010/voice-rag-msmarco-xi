@@ -1,10 +1,17 @@
 # Voice RAG over MSMARCO-XI
 
+**Live: https://voice-rag-84557916235.asia-south1.run.app**
+
 Speak a question in English, Hindi or Gujarati. Get an answer grounded in a
 retrieved passage, with citations, a per-stage latency breakdown, and an explicit
 refusal when the corpus does not contain the answer.
 
 Built for HH Goa 2026 Shortlisting Task 2.
+
+> Deployed on Cloud Run in `asia-south1` (Mumbai) — same region as the judges, so
+> the network isn't quietly spending the latency budget this project worked to
+> save. It scales to zero, so the first request after an idle period pays a cold
+> start while the encoder and index load.
 
 ```
 🎤 audio ──► Sarvam STT ──► transcript + detected language
@@ -217,6 +224,27 @@ skipping work.
 
 The three tiers behave as designed: cache hits at ~2ms, extraction at ~17ms,
 refusals cheapest of all because they exit before answering.
+
+### On the deployed instance
+
+The numbers above are from a dev machine. The live Cloud Run service is slower,
+and hardware is the whole reason — so here is the same measurement taken against
+the deployed URL, 40 validation queries, cache off:
+
+| Deployment | P50 | P70 | P90 | P95 | P100 | Within 200ms |
+|---|---|---|---|---|---|---|
+| Cloud Run, 2 vCPU | 123.3 | 178.6 | 250.4 | 271.2 | 352.6 | **80%** |
+| Cloud Run, 4 vCPU | 100.8 | 135.8 | 163.8 | 187.5 | 196.2 | **100%** |
+| Dev machine, 8 cores | 16.1 | 18.1 | 23.6 | 26.1 | 43.5 | 100% |
+
+The pipeline is CPU-bound — ONNX embedding and extractive span selection are the
+two costs — so it scales almost linearly with available cores. At 2 vCPU a fifth
+of requests miss the target; at 4 vCPU none do, though P100 at 196ms leaves
+little headroom. The service runs on 4 vCPU for that reason.
+
+This is worth stating plainly rather than quoting only the laptop number: "under
+200ms" is a claim about a pipeline *and* the hardware it runs on, and the same
+code misses the target on a smaller instance.
 
 ### What is deliberately outside the core number
 

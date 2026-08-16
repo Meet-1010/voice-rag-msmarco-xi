@@ -65,7 +65,7 @@ IMAGE="$REGION-docker.pkg.dev/$PROJECT/$SERVICE/app"
   --machine-type=e2-highcpu-8 --project "$PROJECT"
 
 step "Deploying to Cloud Run"
-ENV_ARGS="EMBED_THREADS=2"
+ENV_ARGS="EMBED_THREADS=4"
 if [ -f .env ]; then
   # Read the keys from .env rather than taking them on the command line, so they
   # never land in shell history.
@@ -82,7 +82,8 @@ fi
   --allow-unauthenticated \
   --port 7860 \
   --memory 2Gi \
-  --cpu 2 \
+  --cpu-boost \
+  --cpu 4 \
   --concurrency 8 \
   --timeout 300 \
   --min-instances 0 \
