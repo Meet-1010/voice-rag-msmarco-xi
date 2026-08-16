@@ -7,6 +7,10 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
+/* An explicit display rule beats the UA stylesheet's [hidden]{display:none}, so
+   .conf (display:flex) stayed visible when hidden was set and a refusal kept
+   showing the previous answer's confidence bar. */
+[hidden]{display:none !important}
 body{
   background:
     radial-gradient(900px 500px at 15% -10%, rgba(91,140,255,.10), transparent 60%),

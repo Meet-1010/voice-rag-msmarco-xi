@@ -34,7 +34,11 @@ if WEB.exists():
 
     @app.get("/")
     def index():
-        return FileResponse(WEB / "index.html")
+        # The HTML carries the ?v= asset versions, so caching it defeats the whole
+        # cache-busting scheme: the browser keeps requesting last deploy's assets.
+        # Assets stay cacheable because their URLs change when they do.
+        return FileResponse(WEB / "index.html",
+                            headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 if __name__ == "__main__":
