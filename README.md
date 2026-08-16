@@ -27,13 +27,13 @@ Built for HH Goa 2026 Shortlisting Task 2.
               [ cache ]  cos > 0.95 ────┼──► cached answer      (~3ms)
                     │ miss              │
                     ▼                   │
-              [ retrieve ]  Qdrant dense + BM25 sparse ──► RRF fusion
-                    │                   │
+              [ retrieve ]  exact search over 60k vectors  (~3ms)
+                    │         (BM25 built but fused at 0 — see below)
                     ▼                   │
               [ guard_relevance ]  top cosine < τ(lang) ──► REFUSE OUT_OF_CORPUS
                     │                   │
                     ▼                   │
-              [ extract ]  confident answer span? ────────► extractive   (~25ms)
+              [ extract ]  confident answer span? ────────► extractive   (~60ms)
                     │ not confident     │
                     ▼                   │
               [ generate ]  Groq → Sarvam → extractive fallback
@@ -66,8 +66,10 @@ The task scopes the target to "chunking + vector DB retrieval + everything throu
 to final output". Two things are true at once, and this project reports both
 rather than the flattering one.
 
-**The core pipeline meets the target.** Embedding, hybrid retrieval, fusion, all
-four guardrails and extractive answering complete well inside 200ms.
+**The core pipeline meets the target**, on the deployed instance and not just on
+a laptop: embedding, retrieval over 60,464 chunks, all four guardrails and
+extractive answering complete inside 200ms for 100% of measured requests
+(P50 73.7ms, P100 185.2ms live).
 
 **A generative LLM round trip does not, and cannot.** Groq's time-to-first-token
 is 100–200ms over the network before it emits anything; Sarvam STT adds ~150ms+.
@@ -93,13 +95,51 @@ STT and generation are timed and reported as separate, differently-coloured bars
 in the UI and as separate rows in every table. They are never folded into the core
 number.
 
-### Three optimisations that came from measurement, not guesswork
+### Five optimisations that came from measurement, not guesswork
 
 | Change | Before | After | Why |
 |---|---|---|---|
+| Exact search on a BLAS matmul | 126ms | **3.3ms** | Embedded Qdrant scores candidates in single-threaded Python, so extra vCPUs did nothing. Vectors are normalised, so cosine is one `M @ q` that numpy hands to multi-threaded BLAS. |
+| Drop BM25 fusion | 11.6ms | **0ms** | It was *lowering* R@1 from 0.360 to 0.283. Hybrid retrieval is not automatically better. |
 | Partition vector index by language | 70ms | **9.9ms** | Embedded Qdrant walks payload filters in Python. Every query already knows its language, so the filter was pure cost. |
 | Cascade the grounding checks | 130ms | **0.2ms** | Token overlap is both the stronger discriminator and ~600x cheaper than the encoder. It decides the common case alone. |
 | Warm the encoder at startup | 2–3s first call | ~2.4ms | First ONNX inference pays graph-init cost. Paying it before the port opens keeps it out of P100. |
+
+Together these paid for a **3.3x larger corpus** (18,180 → 60,464 chunks) while
+*lowering* worst-case latency, and let the service run on 4 vCPU instead of 8.
+
+### Hybrid retrieval, and why it is switched off
+
+Dense + BM25 with Reciprocal Rank Fusion is the textbook default. It was built,
+measured against dense-only over 300 held-out queries, and lost:
+
+| sparse_weight | R@1 | R@5 | MRR@10 |
+|---|---|---|---|
+| **0.00 (dense only)** | **0.360** | 0.713 | **0.509** |
+| 0.15 | 0.353 | **0.720** | 0.508 |
+| 0.30 | 0.323 | 0.700 | 0.486 |
+| 0.90 | 0.283 | 0.693 | 0.453 |
+
+At any weight worth having it costs 11.6ms, and past 0.15 it actively degrades
+ranking. Two reasons, both specific to this corpus: MSMARCO queries are natural
+language, which is exactly what e5 is trained for, and `rank_bm25` does no
+stemming or morphological normalisation, so on Devanagari and Gujarati its
+candidates are weak enough to displace better dense hits during fusion.
+
+The sparse index is still built and still wired in behind `sparse_weight`,
+because on a corpus of part numbers or SKUs the result would flip. It ships at 0
+on the evidence above.
+
+### Why not HNSW
+
+Qdrant's HNSW is the right answer at millions of vectors. At 60k it would trade
+recall for a speedup exact search already has: the full matmul is 0.59ms locally
+and 3.3ms on the deployed instance, and it returns the true top-k rather than an
+approximation. Verified equivalent — the numpy path returns identical top-10
+results to Qdrant on 59 of 60 queries, the one difference being a score tie.
+
+Qdrant remains the store of record: it owns the collections, payloads and
+persistence, and the retriever falls back to it if the matrices are absent.
 
 ---
 
@@ -227,24 +267,44 @@ refusals cheapest of all because they exit before answering.
 
 ### On the deployed instance
 
-The numbers above are from a dev machine. The live Cloud Run service is slower,
-and hardware is the whole reason — so here is the same measurement taken against
-the deployed URL, 40 validation queries, cache off:
+The numbers above are from a dev machine. Here is the same measurement taken
+against the live URL, 60 validation queries, cache off — and the history, because
+how it got there is the interesting part:
 
-| Deployment | P50 | P70 | P90 | P95 | P100 | Within 200ms |
-|---|---|---|---|---|---|---|
-| Cloud Run, 2 vCPU | 123.3 | 178.6 | 250.4 | 271.2 | 352.6 | **80%** |
-| Cloud Run, 4 vCPU | 100.8 | 135.8 | 163.8 | 187.5 | 196.2 | **100%** |
-| Dev machine, 8 cores | 16.1 | 18.1 | 23.6 | 26.1 | 43.5 | 100% |
+| Deployment | Corpus | Search | P50 | P70 | P90 | P95 | P100 | Within 200ms |
+|---|---|---|---|---|---|---|---|---|
+| Cloud Run, 2 vCPU | 18k | qdrant + bm25 | 123.3 | 178.6 | 250.4 | 271.2 | 352.6 | **80%** |
+| Cloud Run, 4 vCPU | 18k | qdrant + bm25 | 100.8 | 135.8 | 163.8 | 187.5 | 196.2 | 100% |
+| Cloud Run, 8 vCPU | **60k** | qdrant + bm25 | 175.1 | 194.5 | 216.5 | 223.1 | 233.4 | **75%** |
+| **Cloud Run, 4 vCPU** | **60k** | **numpy** | **73.7** | **91.5** | **125.7** | **156.9** | **185.2** | **100%** |
+| Dev machine, 8 cores | 60k | numpy | 11.0 | — | — | — | 18.5 | 100% |
 
-The pipeline is CPU-bound — ONNX embedding and extractive span selection are the
-two costs — so it scales almost linearly with available cores. At 2 vCPU a fifth
-of requests miss the target; at 4 vCPU none do, though P100 at 196ms leaves
-little headroom. The service runs on 4 vCPU for that reason.
+Row three is the instructive failure. Tripling the corpus pushed a quarter of
+requests over budget, and **doubling the vCPUs did not help** — because embedded
+Qdrant's scan is single-threaded, so it could not use them. Profiling per stage
+found `retrieve` at 126ms p50 against 6.5ms locally, a 20x gap where every other
+stage scaled ~6x. That is what pointed at the BLAS matmul.
 
-This is worth stating plainly rather than quoting only the laptop number: "under
-200ms" is a claim about a pipeline *and* the hardware it runs on, and the same
-code misses the target on a smaller instance.
+Row four runs a 3.3x larger corpus than row two, on the same 4 vCPU, with lower
+latency at every percentile.
+
+Live per-stage, 4 vCPU:
+
+| Stage | P50 | P100 |
+|---|---|---|
+| extract | 59.6 | 170.9 |
+| embed | 11.2 | 33.3 |
+| retrieve | 3.3 | 7.7 |
+| guard_input | 0.04 | 0.13 |
+| guard_relevance | 0.01 | 0.09 |
+
+`extract` is now the bottleneck: it embeds the candidate sentences of the top
+passage to pick an answer span. That is the next thing worth optimising and it
+has not been done.
+
+Worth stating plainly rather than quoting only the laptop number: "under 200ms"
+is a claim about a pipeline *and* the hardware under it, and the same code missed
+the target on a smaller instance.
 
 ### What is deliberately outside the core number
 
@@ -415,10 +475,9 @@ tests/        53 unit tests
 - **Gujarati relevance gating is weak** (56.8% TPR). Quantified above rather than
   hidden. A stronger multilingual encoder is the fix; `multilingual-e5-large` is
   2.24GB and does not fit the free-tier footprint.
-- **The deployed index is an 18,024-passage subset** of the 60,022-passage corpus
-  the builder produces, so image builds stay reasonable. Benchmarks are run
-  against the same subset that is deployed, so the reported numbers describe the
-  live system rather than a larger local one.
+- **`extract` is now the dominant stage** (59.6ms p50 live). It embeds the top
+  passage's sentences to pick an answer span; caching those per passage at index
+  time would remove most of it. Not done.
 - **Cross-encoder reranking is off by default.** It costs 40–70ms and
   `ms-marco-MiniLM` is English-only; running it on Devanagari produces confident
   nonsense. It is behind a config flag and skipped for non-English queries.
