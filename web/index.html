@@ -6,7 +6,7 @@
 <title>Voice RAG · MSMARCO-XI</title>
 <!-- ?v= is bumped on asset changes; without it browsers serve a stale stylesheet
      after a redeploy and the layout silently breaks. -->
-<link rel="stylesheet" href="/static/style.css?v=3">
+<link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
 <div class="shell">
@@ -24,7 +24,7 @@
 
   <section class="panel ask">
     <div class="mic-row">
-      <button id="mic" class="mic" title="Hold to speak, or click to toggle">
+      <button id="mic" class="mic" title="Click to start recording, click again to send">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3z"/>
           <path d="M19 11a7 7 0 0 1-14 0M12 18v3"/>
@@ -32,8 +32,8 @@
         <span class="pulse" id="pulse"></span>
       </button>
       <div class="mic-meta">
-        <div class="mic-state" id="micState">Hold to speak</div>
-        <div class="mic-hint" id="micHint">or type a question below</div>
+        <div class="mic-state" id="micState">Click to speak</div>
+        <div class="mic-hint" id="micHint">click the mic, speak, click again</div>
       </div>
       <select id="lang" title="Retrieval language filter">
         <option value="">Auto-detect</option>
@@ -95,6 +95,6 @@
   </section>
 
 </div>
-<script src="/static/app.js?v=3"></script>
+<script src="/static/app.js?v=4"></script>
 </body>
 </html>
