@@ -1,0 +1,17 @@
+# gcloud falls back to .gitignore when this file is absent, which would strip
+# .qdrant/ and .artifacts/ from the build context - exactly the prebuilt index
+# the Dockerfile wants to ship. They are gitignored (regenerable, 124MB) but
+# they do belong in the image.
+.git/
+.gitignore
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+
+# Dev-only: the full 60k corpus is not what the deployed image indexes.
+data/corpus.jsonl
+data/queries.jsonl
+
+.DS_Store
