@@ -49,8 +49,15 @@ step "Enabling required APIs (idempotent, can take a minute)"
 "$GCLOUD" services enable run.googleapis.com cloudbuild.googleapis.com \
   artifactregistry.googleapis.com --project "$PROJECT"
 
+step "Ensuring Artifact Registry repo"
+# gcr.io is legacy and pushing to it needs createOnPush, which the default build
+# service account does not have. A regional Artifact Registry repo in the same
+# region as Cloud Run is the supported path and pulls faster on cold start.
+"$GCLOUD" artifacts repositories create "$SERVICE" --repository-format=docker \
+  --location="$REGION" --project "$PROJECT" 2>/dev/null || true
+
 step "Building image with Cloud Build"
-IMAGE="gcr.io/$PROJECT/$SERVICE"
+IMAGE="$REGION-docker.pkg.dev/$PROJECT/$SERVICE/app"
 # The image embeds ~18k chunks at build time. On the default single-core builder
 # that step alone exceeded a 45 minute deadline; e2-highcpu-8 finishes it in a
 # couple of minutes and costs cents because the build is short.
