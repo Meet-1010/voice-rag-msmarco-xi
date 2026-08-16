@@ -125,8 +125,9 @@ tokens) are the ones that actually bite.
 
 ### Results
 
-15,000→12,000 passages, 300 held-out queries with known relevant passages, all
-three languages, exact search. Full table in [`chunking/comparison.md`](chunking/comparison.md).
+12,000 passages sampled evenly across all three languages, 300 held-out queries
+with known relevant passages, exact search. Full table in
+[`chunking/comparison.md`](chunking/comparison.md).
 
 | Strategy | R@1 | R@5 | R@10 | MRR@10 | R@5 en | R@5 hi | R@5 gu | Build | Search P50 | Index |
 |---|---|---|---|---|---|---|---|---|---|---|
