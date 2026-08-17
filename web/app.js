@@ -84,14 +84,21 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
 
 function tick(el, value) {
   if (value == null) { el.textContent = "–"; return; }
-  const t0 = performance.now(), dur = 420;
+  const fmt = (v) => (v < 10 ? v.toFixed(1) : v.toFixed(0));
+  const dur = 420, t0 = performance.now();
+  let settled = false;
+
   const step = (now) => {
     const p = Math.min(1, (now - t0) / dur);
-    const v = value * (1 - Math.pow(1 - p, 3));
-    el.textContent = v < 10 ? v.toFixed(1) : v.toFixed(0);
-    if (p < 1) requestAnimationFrame(step);
+    el.textContent = fmt(value * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(step); else settled = true;
   };
   requestAnimationFrame(step);
+
+  // requestAnimationFrame is paused in a background tab, so without this the
+  // number never appears at all - the count-up is decoration and must not be
+  // what decides whether the measurement is shown.
+  setTimeout(() => { if (!settled) el.textContent = fmt(value); }, dur + 120);
 }
 
 function renderTimings(t, voiceMs) {
@@ -366,15 +373,20 @@ function toggleRec() {
 }
 
 $("form").addEventListener("submit", (e) => { e.preventDefault(); askText($("q").value); });
-document.querySelectorAll(".chip,.try-card").forEach((c) =>
-  c.addEventListener("click", () => {
-    // Cards carry the language their passage is indexed under; without it a
-    // Gujarati question typed into an "Auto" box can be routed by script
-    // detection alone, which is right but slower to demo.
-    if (c.dataset.lang !== undefined) $("lang").value = c.dataset.lang;
-    $("q").value = c.dataset.q;
-    askText(c.dataset.q);
-  }));
+// Delegated rather than bound per element: the preset markup has been renamed
+// twice (chip -> try-card -> pq) and each rename silently unbound every preset,
+// because a querySelectorAll that matches nothing fails without an error.
+// Delegation keys off the data attribute that actually matters instead.
+document.addEventListener("click", (e) => {
+  const el = e.target instanceof Element && e.target.closest("[data-q]");
+  if (!el) return;
+  // Presets carry the language their passage is indexed under; without it a
+  // Gujarati question in an "Auto" box relies on script detection alone, which
+  // is correct but slower to demo.
+  if (el.dataset.lang !== undefined) $("lang").value = el.dataset.lang;
+  $("q").value = el.dataset.q;
+  askText(el.dataset.q);
+});
 $("mic").addEventListener("click", toggleRec);
 
 health();
