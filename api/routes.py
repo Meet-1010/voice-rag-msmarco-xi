@@ -41,14 +41,15 @@ def ask(req: AskRequest):
     orc = boot()
     _counters["ask"] += 1
     answer = orc.ask(req.query, lang=req.lang, top_k=req.top_k,
-                     use_cache=req.use_cache, allow_generative=req.allow_generative)
+                     use_cache=req.use_cache, allow_generative=req.allow_generative,
+                     allow_general=req.allow_general)
     _record(answer)
     return answer
 
 
 @router.post("/ask-voice")
 async def ask_voice(file: UploadFile = File(...), lang: str | None = Form(None),
-                    use_cache: bool = Form(True)):
+                    use_cache: bool = Form(True), allow_general: bool = Form(True)):
     orc = boot()
     _counters["ask_voice"] += 1
 
@@ -63,7 +64,8 @@ async def ask_voice(file: UploadFile = File(...), lang: str | None = Form(None),
     except RuntimeError as exc:
         raise HTTPException(502, f"speech-to-text failed: {exc}") from exc
 
-    answer = orc.ask(stt.transcript, lang=lang or stt.lang, use_cache=use_cache)
+    answer = orc.ask(stt.transcript, lang=lang or stt.lang, use_cache=use_cache,
+                     allow_general=allow_general)
     _record(answer)
 
     body = answer.model_dump()

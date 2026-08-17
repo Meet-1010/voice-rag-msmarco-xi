@@ -16,12 +16,17 @@ class ReasonCode(str, Enum):
     LOW_CONFIDENCE = "LOW_CONFIDENCE"
     UNGROUNDED_OUTPUT = "UNGROUNDED_OUTPUT"
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    ANSWERED_FROM_GENERAL_KNOWLEDGE = "ANSWERED_FROM_GENERAL_KNOWLEDGE"
 
 
 class AnswerPath(str, Enum):
     CACHE = "cache"
     EXTRACTIVE = "extractive"
     GENERATIVE = "generative"
+    # Answered from the model's own knowledge because the corpus had nothing.
+    # Deliberately a separate path, never labelled "grounded", and always carries
+    # OUT_OF_CORPUS so the provenance travels with the answer.
+    GENERAL = "general"
     REFUSED = "refused"
 
 
@@ -31,6 +36,10 @@ class AskRequest(BaseModel):
     top_k: int | None = Field(None, ge=1, le=50)
     use_cache: bool = True
     allow_generative: bool = True
+    # When the corpus cannot answer: False refuses (strict RAG, what the task
+    # asks us to demonstrate), True answers from model knowledge with the answer
+    # explicitly marked ungrounded.
+    allow_general: bool = True
 
     @field_validator("query")
     @classmethod

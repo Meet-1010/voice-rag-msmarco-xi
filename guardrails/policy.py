@@ -44,6 +44,11 @@ _MESSAGES = {
         "hi": "मैंने उत्तर तैयार किया, पर उसे प्राप्त अंशों से सत्यापित नहीं कर सका, इसलिए मैं इसे नहीं बताऊँगा।",
         "gu": "મેં જવાબ તૈયાર કર્યો, પણ પ્રાપ્ત ફકરાઓ સામે તેની ચકાસણી કરી શક્યો નહીં.",
     },
+    ReasonCode.ANSWERED_FROM_GENERAL_KNOWLEDGE: {
+        "en": "Not found in my knowledge base — answered from general knowledge instead, so treat it with more caution than a cited answer.",
+        "hi": "यह मेरे ज्ञान भंडार में नहीं मिला — सामान्य जानकारी के आधार पर उत्तर दिया गया है, इसलिए इसे सावधानी से लें।",
+        "gu": "આ મારા જ્ઞાન ભંડારમાં મળ્યું નથી — સામાન્ય જ્ઞાનના આધારે જવાબ આપ્યો છે, તેથી સાવધાની રાખો.",
+    },
     ReasonCode.PROVIDER_UNAVAILABLE: {
         "en": "The answering model is unavailable, so I am returning the retrieved passage directly.",
         "hi": "उत्तर देने वाला मॉडल उपलब्ध नहीं है, इसलिए मैं संबंधित अंश सीधे दे रहा हूँ।",

@@ -119,11 +119,15 @@ llm:
   provider_order: [groq, sarvam]
   groq:
     base_url: https://api.groq.com/openai/v1
-    primary: llama-3.3-70b-versatile
-    fast: llama-3.1-8b-instant
+    # Queried from the live /models endpoint, not copied from a blog post:
+    # llama-3.3-70b-versatile was decommissioned and started returning 404,
+    # which silently killed every generative answer. Pin what exists, and check
+    # `curl https://api.groq.com/openai/v1/models` when generation starts failing.
+    primary: openai/gpt-oss-120b     # largest chat model Groq currently serves
+    fast: openai/gpt-oss-20b
   sarvam:
     base_url: https://api.sarvam.ai
-    model: sarvam-m
+    model: sarvam-105b    # sarvam-m is deprecated
   max_tokens: 320
   temperature: 0.0
 

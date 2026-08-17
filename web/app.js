@@ -4,15 +4,16 @@ const CORE_BUDGET = 200;
 // Order matters: the HUD reads as a pipeline, so keep it in execution order rather
 // than sorting by duration.
 const STAGE_ORDER = ["stt", "guard_input", "cache", "embed", "retrieve", "rerank",
-                     "guard_relevance", "extract", "generate", "guard_grounding"];
+                     "guard_relevance", "extract", "generate", "generate_general", "guard_grounding"];
 const STAGE_LABEL = {
   stt: "STT", guard_input: "input guard", cache: "cache", embed: "embed",
   retrieve: "retrieve", rerank: "rerank", guard_relevance: "relevance",
-  extract: "extract", generate: "generate", guard_grounding: "grounding",
+  extract: "extract", generate: "generate", generate_general: "LLM (general)",
+  guard_grounding: "grounding",
 };
 // Stages outside the 200ms core budget, drawn in a different colour so the
 // distinction is visible rather than asserted in a footnote.
-const EXTERNAL = new Set(["stt", "generate"]);
+const EXTERNAL = new Set(["stt", "generate", "generate_general"]);
 
 let recorder = null, chunks = [], busy = false;
 
@@ -88,14 +89,15 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
 
 function render(res) {
   const ans = $("answer");
-  ans.className = "answer" + (res.refused ? " refused" : "");
+  ans.className = "answer" + (res.refused ? " refused" : res.path === "general" ? " general" : "");
   ans.innerHTML = `<p>${esc(res.answer)}</p>`;
 
   const pb = $("pathBadge");
   pb.hidden = false;
   pb.dataset.p = res.path;
-  pb.textContent = res.path + (res.cache_similarity ? ` ${res.cache_similarity.toFixed(2)}` : "")
-    + (res.provider && res.path === "generative" ? ` · ${res.provider}` : "");
+  pb.textContent = (res.path === "general" ? "general knowledge" : res.path)
+    + (res.cache_similarity ? ` ${res.cache_similarity.toFixed(2)}` : "")
+    + (res.provider && (res.path === "generative" || res.path === "general") ? ` · ${res.provider}` : "");
 
   const rb = $("reasonBadge");
   rb.hidden = !res.reason_code;
@@ -131,7 +133,11 @@ async function askText(q) {
     const r = await fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: q, lang: $("lang").value || null }),
+      body: JSON.stringify({
+        query: q,
+        lang: $("lang").value || null,
+        allow_general: !$("strict").checked,
+      }),
     });
     if (!r.ok) throw new Error(`server returned ${r.status}`);
     render(await r.json());
@@ -149,6 +155,7 @@ async function askVoice(blob, ext = "webm") {
     const fd = new FormData();
     fd.append("file", blob, `audio.${ext}`);
     if ($("lang").value) fd.append("lang", $("lang").value);
+    fd.append("allow_general", String(!$("strict").checked));
     const r = await fetch("/ask-voice", { method: "POST", body: fd });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
@@ -159,7 +166,7 @@ async function askVoice(blob, ext = "webm") {
     fail(e.message);
   } finally {
     setBusy(false);
-    $("micState").textContent = "Hold to speak";
+    $("micState").textContent = "Click to speak";
   }
 }
 

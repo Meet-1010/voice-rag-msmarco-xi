@@ -19,7 +19,8 @@ from guardrails.grounding_guard import GroundingGuard
 from guardrails.input_guard import InputGuard
 from guardrails.policy import message as refusal_message
 from guardrails.relevance_guard import RelevanceGuard
-from harness.prompts import REPAIR, SYSTEM, build_user_prompt
+from harness.prompts import (GENERAL_SYSTEM, REPAIR, SYSTEM, build_general_prompt,
+                             build_user_prompt)
 from harness.providers import ProviderChain, ProviderError, parse_json_answer
 from harness.schemas import (Answer, AnswerPath, Citation, LLMAnswer, ReasonCode,
                              StageTrace, Timings)
@@ -116,8 +117,40 @@ class Orchestrator:
                                if str(c).strip().lstrip("-").isdigit()]
         return LLMAnswer(**parsed), provider
 
+    def _answer_general(self, query: str, lang: str | None, trace: Trace,
+                        detail: str | None) -> Answer:
+        """Answer from model knowledge when the corpus has nothing.
+
+        Kept strictly separate from the grounded paths: no citations are
+        fabricated, `grounded` stays False, and the reason code travels with the
+        response so a client can style it differently. The relevance guard still
+        ran and still fired - this is what we do with its verdict, not a bypass
+        of it.
+        """
+        try:
+            with trace.span("generate_general"):
+                raw, provider = self.providers.complete(
+                    GENERAL_SYSTEM, build_general_prompt(query),
+                    self.budgets["generate"] / 1000)
+            parsed = parse_json_answer(raw) or {}
+            text = (parsed.get("answer") or "").strip()
+            confidence = float(parsed.get("confidence", 0.5) or 0.5)
+        except (ProviderError, ValueError, TypeError):
+            return self._refuse(ReasonCode.OUT_OF_CORPUS, lang, trace, detail)
+
+        if not text:
+            return self._refuse(ReasonCode.OUT_OF_CORPUS, lang, trace, detail)
+
+        return Answer(
+            answer=text, citations=[], confidence=min(confidence, 0.75),
+            path=AnswerPath.GENERAL, lang=lang, grounded=False, refused=False,
+            reason_code=ReasonCode.ANSWERED_FROM_GENERAL_KNOWLEDGE,
+            provider=provider, timings=self._timings(trace), trace=self._spans(trace),
+        )
+
     def ask(self, query: str, lang: str | None = None, top_k: int | None = None,
-            use_cache: bool = True, allow_generative: bool = True) -> Answer:
+            use_cache: bool = True, allow_generative: bool = True,
+            allow_general: bool = True) -> Answer:
         trace = Trace()
 
         with trace.span("guard_input"):
@@ -152,6 +185,10 @@ class Orchestrator:
         with trace.span("guard_relevance"):
             code, detail, top_score = self.relevance_guard.check(hits, lang)
         if code:
+            # The guard did its job either way: we know the corpus cannot answer.
+            # What follows is a policy choice about what to do with that fact.
+            if allow_general and self.providers.any_available():
+                return self._answer_general(query, lang, trace, detail)
             return self._refuse(code, lang, trace, detail)
 
         with trace.span("extract"):
@@ -183,8 +220,11 @@ class Orchestrator:
             return self._degrade(query, q_vec, hits, contexts, lang, trace)
 
         if not llm.answer.strip():
-            # The model followed instructions and declined; that is a real signal,
-            # not a failure.
+            # The model followed instructions and declined - a real signal that
+            # the retrieved passages did not contain the answer, even though they
+            # scored above the relevance threshold.
+            if allow_general:
+                return self._answer_general(query, lang, trace, "no answer in retrieved context")
             return self._refuse(ReasonCode.OUT_OF_CORPUS, lang, trace, "model found no answer in context")
 
         with trace.span("guard_grounding"):

@@ -112,3 +112,10 @@ select{background:#101728;color:var(--ink);border:1px solid var(--line);border-r
 .cite-body{font-size:13.5px;color:#c6d1e6;line-height:1.55}
 .muted{color:var(--dim);font-size:12px}
 .err{color:var(--bad)}
+
+.strict{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--muted);font-size:12.5px;cursor:pointer;user-select:none}
+.strict input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+.strict:hover{color:var(--ink)}
+/* Ungrounded answers must not look like cited ones. */
+.badge.path[data-p="general"]{background:rgba(255,176,46,.16);color:#ffcf85;border-color:rgba(255,176,46,.45)}
+.answer.general{border-left:3px solid var(--warn);padding-left:13px}
