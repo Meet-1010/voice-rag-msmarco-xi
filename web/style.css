@@ -119,3 +119,6 @@ select{background:#101728;color:var(--ink);border:1px solid var(--line);border-r
 /* Ungrounded answers must not look like cited ones. */
 .badge.path[data-p="general"]{background:rgba(255,176,46,.16);color:#ffcf85;border-color:rgba(255,176,46,.45)}
 .answer.general{border-left:3px solid var(--warn);padding-left:13px}
+
+/* Live transcript feedback: the input visibly fills while speaking. */
+#q.live{border-color:var(--bad);box-shadow:0 0 0 3px rgba(255,95,109,.14);color:#fff}

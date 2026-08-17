@@ -148,7 +148,7 @@ async function askText(q) {
   }
 }
 
-async function askVoice(blob, ext = "webm") {
+async function askVoice(blob, ext = "webm", heard = "") {
   setBusy(true);
   $("micState").textContent = "Transcribing…";
   try {
@@ -161,16 +161,78 @@ async function askVoice(blob, ext = "webm") {
       const body = await r.json().catch(() => ({}));
       throw new Error(body.detail || `server returned ${r.status}`);
     }
-    render(await r.json());
+    const res = await r.json();
+    if (!res.transcript && heard) {
+      // Sarvam returned nothing usable but the browser did hear speech; asking
+      // with what we heard beats telling the user their microphone is broken.
+      render(await (await fetch("/ask", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: heard, lang: $("lang").value || null,
+                               allow_general: !$("strict").checked }),
+      })).json());
+      $("q").value = heard;
+      return;
+    }
+    if (res.transcript) $("q").value = res.transcript;
+    render(res);
   } catch (e) {
+    if (heard) {
+      // askText bails out while busy is set, so clear it before handing over.
+      setBusy(false);
+      $("q").value = heard;
+      await askText(heard);
+      return;
+    }
     fail(e.message);
   } finally {
     setBusy(false);
     $("micState").textContent = "Click to speak";
+    $("q").placeholder = "Ask anything…";
   }
 }
 
-let recTimer = null, recStart = 0;
+let recTimer = null, recStart = 0, recog = null, liveText = "", finalText = "";
+
+// Browser speech recognition runs locally and emits interim results while you
+// are still talking, so words appear as they are spoken. Sarvam still produces
+// the transcript we actually query with - this is the live feedback layer, and
+// the fallback if Sarvam is unreachable.
+const SPEECH_LANG = { en: "en-IN", hi: "hi-IN", gu: "gu-IN" };
+
+function startLiveTranscript() {
+  const Impl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  liveText = finalText = "";
+  if (!Impl) return null;
+
+  const r = new Impl();
+  r.continuous = true;
+  r.interimResults = true;
+  r.lang = SPEECH_LANG[$("lang").value] || SPEECH_LANG.en;
+  r.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const chunk = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += chunk;
+      else interim += chunk;
+    }
+    liveText = (finalText + interim).trim();
+    $("q").value = liveText;
+    $("q").classList.add("live");
+    $("micHint").textContent = liveText ? "listening — click the mic to send" : "speak now…";
+  };
+  // Recognition dies on its own after a pause; restart while still recording.
+  r.onend = () => { if (recorder) { try { r.start(); } catch { /* already starting */ } } };
+  r.onerror = (e) => { if (e.error === "not-allowed") $("micState").textContent = "Mic blocked"; };
+  try { r.start(); } catch { return null; }
+  return r;
+}
+
+function stopLiveTranscript() {
+  if (!recog) return;
+  recog.onend = null;
+  try { recog.stop(); } catch { /* already stopped */ }
+  recog = null;
+}
 
 async function startRec() {
   if (busy || recorder) return;
@@ -204,20 +266,30 @@ async function startRec() {
     stream.getTracks().forEach((t) => t.stop());
     const blob = new Blob(chunks, { type: type || "audio/webm" });
     const held = Date.now() - recStart;
+    const heard = liveText.trim();
     recorder = null;
     clearInterval(recTimer);
+    stopLiveTranscript();
     $("mic").classList.remove("rec");
+    $("q").classList.remove("live");
     $("micHint").textContent = "click the mic, speak, click again";
+
     if (held < 400 || blob.size < 1200) {
+      // Only complain if we genuinely captured nothing. If live recognition
+      // heard words, the recording was real and we can just use them.
+      if (heard) { $("micState").textContent = "Click to speak"; askText(heard); return; }
       $("micState").textContent = "Too short — speak for a second";
       return;
     }
-    askVoice(blob, ext);
+    askVoice(blob, ext, heard);
   };
   recorder.start();
+  recog = startLiveTranscript();
   recStart = Date.now();
   $("mic").classList.add("rec");
-  $("micHint").textContent = "click again to stop";
+  $("q").value = "";
+  $("q").placeholder = recog ? "listening…" : "recording… (live transcript unavailable)";
+  $("micHint").textContent = recog ? "speak now…" : "click again to stop";
   recTimer = setInterval(() => {
     $("micState").textContent = `Listening… ${((Date.now() - recStart) / 1000).toFixed(1)}s`;
   }, 100);
