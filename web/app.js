@@ -62,9 +62,9 @@ async function health() {
     const h = await (await fetch("/health")).json();
     const n = (h.indexed_points || 0).toLocaleString();
     const langs = (h.manifest?.langs || []).join(" · ") || "–";
-    el.innerHTML = `<span class="dot ok"></span><span>${n} chunks · ${langs}</span>`;
+    el.innerHTML = `<span class="dot ok"></span><span>${n} chunks</span>`;
   } catch {
-    el.innerHTML = `<span class="dot bad"></span><span>backend unreachable</span>`;
+    el.innerHTML = `<span class="dot bad"></span><span>offline</span>`;
   }
 }
 
@@ -82,17 +82,26 @@ function setBusy(on) {
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
   (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
+function tick(el, value) {
+  if (value == null) { el.textContent = "–"; return; }
+  const t0 = performance.now(), dur = 420;
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / dur);
+    const v = value * (1 - Math.pow(1 - p, 3));
+    el.textContent = v < 10 ? v.toFixed(1) : v.toFixed(0);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function renderTimings(t, voiceMs) {
   const stages = { ...(t.stages || {}) };
   if (t.stt_ms) stages.stt = t.stt_ms;
 
-  $("coreMs").textContent = (t.core_ms ?? 0).toFixed(1);
-  $("totalMs").textContent = (t.wall_ms ?? t.total_ms ?? 0).toFixed(1);
-
+  tick($("coreMs"), t.core_ms ?? 0);
+  tick($("totalMs"), t.wall_ms ?? t.total_ms ?? 0);
   // The number a person actually feels: silence to answer on screen.
-  const vm = $("voiceMs");
-  vm.textContent = voiceMs == null ? "–" : voiceMs.toFixed(0);
-  vm.parentElement.classList.toggle("hot", voiceMs != null && voiceMs <= CORE_BUDGET);
+  tick($("voiceMs"), voiceMs);
 
   const tag = $("budgetTag");
   const within = (t.core_ms ?? 0) <= CORE_BUDGET;
@@ -111,17 +120,25 @@ function renderTimings(t, voiceMs) {
 }
 
 function renderCitations(cites) {
-  $("citeCount").textContent = cites.length ? `${cites.length} passage${cites.length > 1 ? "s" : ""}` : "";
-  $("cites").innerHTML = cites.length
-    ? cites.map((c, i) => `
-      <div class="cite">
+  $("citeCount").textContent = cites.length ? `${cites.length} passages` : "grounded sources";
+  $("citesIdle").hidden = cites.length > 0;
+  if (!cites.length) {
+    $("cites").innerHTML = "";
+    $("citesIdle").textContent = "No passages cited — this answer is not grounded in the corpus.";
+    return;
+  }
+  $("cites").innerHTML = cites.map((c, i) => `
+    <div class="cite" style="animation-delay:${(i * 45)}ms">
+      <span class="wash"></span>
+      <span class="cite-idx">${String(i + 1).padStart(2, "0")}</span>
+      <div class="cite-inner">
         <div class="cite-head">
-          <span>[${i + 1}] ${esc(c.passage_id)} · ${esc(c.lang)}</span>
+          <span class="mono">${esc(c.passage_id)} · ${esc(c.lang)}</span>
           <span class="score">${c.score.toFixed(3)}</span>
         </div>
         <div class="cite-body">${esc(c.text)}</div>
-      </div>`).join("")
-    : `<p class="idle">No passages cited — this answer is not grounded in the corpus.</p>`;
+      </div>
+    </div>`).join("");
 }
 
 function render(res, voiceMs = null) {
@@ -272,6 +289,7 @@ async function startRec() {
     clearInterval(recTimer);
     stopLiveTranscript();
     $("mic").classList.remove("rec");
+    window.setCursorLabel?.("");
     $("q").classList.remove("live");
     $("micState").textContent = "Click to speak";
     $("micHint").textContent = "click the mic, speak, click again";
@@ -292,6 +310,7 @@ async function startRec() {
   recog = startLiveTranscript();
   recStart = Date.now();
   $("mic").classList.add("rec");
+  window.setCursorLabel?.("click to send");
   $("q").value = "";
   $("q").placeholder = recog ? "listening…" : "recording…";
   $("micHint").textContent = recog ? "speak now…" : "click again to stop";
@@ -352,3 +371,34 @@ document.querySelectorAll(".chip").forEach((c) =>
 $("mic").addEventListener("click", toggleRec);
 
 health();
+
+
+/* Custom cursor. The ring trails with easing so movement reads as weight, and a
+   label appears while recording so the click target is never ambiguous. */
+(() => {
+  if (!window.matchMedia("(hover:hover) and (pointer:fine)").matches) return;
+  const dot = $("cur"), ring = $("curRing"), label = $("curLabel");
+  let x = -100, y = -100, rx = -100, ry = -100;
+
+  addEventListener("mousemove", (e) => {
+    x = e.clientX; y = e.clientY;
+    dot.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%)`;
+    const hot = e.target instanceof Element &&
+      e.target.closest("button,a,input,select,label,.cite");
+    dot.style.width = dot.style.height = hot ? "6px" : "14px";
+    ring.style.opacity = hot ? ".6" : ".3";
+    ring.style.width = ring.style.height = hot ? "58px" : "40px";
+  });
+
+  (function loop() {
+    rx += (x - rx) * 0.18; ry += (y - ry) * 0.18;
+    ring.style.transform = `translate(${rx}px,${ry}px) translate(-50%,-50%)`;
+    if (!label.hidden) label.style.transform = `translate(${rx + 18}px,${ry + 16}px)`;
+    requestAnimationFrame(loop);
+  })();
+
+  window.setCursorLabel = (text) => {
+    label.hidden = !text;
+    if (text) label.textContent = text;
+  };
+})();
