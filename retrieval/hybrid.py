@@ -28,6 +28,8 @@ class HybridRetriever:
         from index.dense import DenseIndex
         self.dense_index = DenseIndex(root)
         self.search_backend = "numpy" if self.dense_index.available() else "qdrant"
+        if self.dense_index.available():
+            self.dense_index.warmup()
         # Only the sparse branch resolves chunk_ids through this map, so with
         # sparse fusion disabled it is 90MB of resident memory and seconds of
         # startup for nothing.

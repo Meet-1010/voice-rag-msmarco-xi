@@ -45,6 +45,20 @@ class DenseIndex:
             with meta_path.open(encoding="utf-8") as fh:
                 self.payloads[lang] = [json.loads(line) for line in fh]
 
+    def warmup(self) -> None:
+        """Fault every matrix into resident memory before serving.
+
+        The arrays are mmapped, so pages load lazily on first touch. That put a
+        ~450ms one-off cost on the first query in each language - invisible in a
+        benchmark that loops over warm data, and landing squarely on the first
+        real user of each language. One full pass per matrix pays it at boot,
+        while the port is still closed.
+        """
+        probe = np.zeros(384, dtype=np.float32)
+        probe[0] = 1.0
+        for m in self.mats.values():
+            float((m @ probe).sum())
+
     def available(self) -> bool:
         return bool(self.mats)
 
