@@ -35,10 +35,10 @@ body{
   letter-spacing:.13em;text-transform:uppercase;font-weight:700;white-space:nowrap}
 
 /* ---- shell ---------------------------------------------------------------- */
-.shell{max-width:1240px;margin:0 auto;padding:26px 26px 90px}
+.shell{max-width:1240px;margin:0 auto;padding:18px 26px 70px}
 
-.head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;
-  padding-bottom:20px;border-bottom:1px solid var(--ink);flex-wrap:wrap}
+.head{display:flex;justify-content:space-between;align-items:center;gap:20px;
+  padding-bottom:14px;border-bottom:1px solid var(--ink);flex-wrap:wrap}
 .wordmark{display:flex;align-items:baseline;gap:10px}
 .wordmark h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.045em;line-height:1}
 .reg{font-size:11px;font-weight:700;vertical-align:super}
@@ -51,9 +51,10 @@ body{
 .dot.bad{background:var(--red)}
 
 /* ---- hero ----------------------------------------------------------------- */
-.hero{padding:56px 0 40px;border-bottom:1px solid var(--ink)}
-.hero h2{margin:0;font-size:clamp(44px,9vw,124px);line-height:.86;font-weight:800;
-  letter-spacing:-.055em;text-transform:uppercase}
+.hero{padding:16px 0 14px;border-bottom:1px solid var(--ink);display:flex;
+  justify-content:space-between;align-items:flex-end;gap:28px;flex-wrap:wrap}
+.hero h2{margin:0;font-size:clamp(26px,3.6vw,44px);line-height:.95;font-weight:800;
+  letter-spacing:-.045em;text-transform:uppercase;max-width:620px}
 .hero h2 .red{color:var(--red)}
 .hero-foot{display:flex;justify-content:space-between;gap:26px;margin-top:26px;flex-wrap:wrap}
 .hero-foot p{margin:0;max-width:440px;color:var(--ink-2);font-size:14.5px}
@@ -61,9 +62,9 @@ body{
 .stat b{display:block;font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1}
 
 /* ---- ask ------------------------------------------------------------------ */
-.ask{padding:34px 0;border-bottom:1px solid var(--ink)}
+.ask{padding:16px 0 14px;border-bottom:1px solid var(--ink)}
 .mic-row{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
-.mic{position:relative;width:76px;height:76px;flex:0 0 76px;border:1px solid var(--ink);
+.mic{position:relative;width:60px;height:60px;flex:0 0 60px;border:1px solid var(--ink);
   background:transparent;color:var(--ink);display:grid;place-items:center;
   transition:background .18s,color .18s}
 .mic svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
@@ -79,12 +80,12 @@ body{
 select,input,button{font:inherit;font-family:inherit}
 select{background:transparent;border:1px solid var(--ink);padding:11px 13px;
   font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--ink)}
-.input-row{display:flex;gap:0;margin-top:22px;border:1px solid var(--ink)}
-#q{flex:1;background:transparent;border:0;color:var(--ink);padding:19px 20px;
+.input-row{display:flex;gap:0;margin-top:16px;border:1px solid var(--ink)}
+#q{flex:1;background:transparent;border:0;color:var(--ink);padding:15px 18px;
   outline:none;font-size:17px;letter-spacing:-.01em}
 #q::placeholder{color:rgba(12,11,10,.34)}
 #q.live{background:rgba(232,50,30,.07)}
-.send{background:var(--ink);color:var(--bone);border:0;padding:19px 34px;font-weight:800;
+.send{background:var(--ink);color:var(--bone);border:0;padding:15px 30px;font-weight:800;
   font-size:11px;letter-spacing:.16em;text-transform:uppercase;transition:background .16s}
 .send:hover:not(:disabled){background:var(--red)}
 .send:disabled{opacity:.4}
@@ -104,7 +105,7 @@ select{background:transparent;border:1px solid var(--ink);padding:11px 13px;
 
 /* ---- results grid --------------------------------------------------------- */
 .grid{display:grid;grid-template-columns:1.45fr 1fr;gap:0;border-bottom:1px solid var(--ink)}
-.grid>*{padding:30px 0}
+.grid>*{padding:18px 0}
 .grid>*:first-child{padding-right:32px;border-right:1px solid var(--ink)}
 .grid>*:last-child{padding-left:32px}
 @media(max-width:960px){
@@ -112,7 +113,7 @@ select{background:transparent;border:1px solid var(--ink);padding:11px 13px;
   .grid>*:first-child{padding-right:0;border-right:0;border-bottom:1px solid var(--line)}
   .grid>*:last-child{padding-left:0}
 }
-.panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:18px}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:13px}
 .badges{display:flex;gap:6px;flex-wrap:wrap}
 .badge{font-size:9.5px;font-weight:800;letter-spacing:.13em;padding:5px 10px;text-transform:uppercase;
   border:1px solid var(--ink)}
@@ -126,7 +127,7 @@ select{background:transparent;border:1px solid var(--ink);padding:11px 13px;
   color:var(--ink-2);font-size:13.5px}
 .transcript b{color:var(--ink)}
 .transcript .src{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.6;margin-left:8px}
-.answer{min-height:96px;font-size:19px;line-height:1.55;letter-spacing:-.015em}
+.answer{min-height:80px;font-size:18px;line-height:1.55;letter-spacing:-.015em}
 .answer p{margin:0}
 .answer.general{border-left:3px solid var(--gold);padding-left:15px}
 .answer.refused{color:var(--red)}
@@ -136,11 +137,11 @@ select{background:transparent;border:1px solid var(--ink);padding:11px 13px;
 .conf .track{flex:1;max-width:200px;height:3px;background:var(--line)}
 .conf .fill{display:block;height:100%;background:var(--red)}
 
-.totals{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--ink);margin-bottom:20px}
-.total{padding:15px 14px;border-right:1px solid var(--line)}
+.totals{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--ink);margin-bottom:14px}
+.total{padding:11px 13px;border-right:1px solid var(--line)}
 .total:last-child{border-right:0}
 .total .k{font-size:9px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--ink-2)}
-.total b{display:block;font-size:29px;font-weight:800;letter-spacing:-.04em;
+.total b{display:block;font-size:26px;font-weight:800;letter-spacing:-.04em;
   font-variant-numeric:tabular-nums;line-height:1.15}
 .total.hero-stat{background:var(--red);border-right-color:rgba(255,255,255,.25)}
 .total.hero-stat .k,.total.hero-stat b{color:#fff}
@@ -148,7 +149,7 @@ select{background:transparent;border:1px solid var(--ink);padding:11px 13px;
 .budget-tag.in{background:var(--ok);color:#fff}
 .budget-tag.out{background:var(--gold);color:#fff}
 
-.bars{display:flex;flex-direction:column;gap:9px}
+.bars{display:flex;flex-direction:column;gap:7px}
 .bar{display:grid;grid-template-columns:80px 1fr 46px;align-items:center;gap:11px;font-size:11px}
 .bar .name{text-align:right;color:var(--ink-2);letter-spacing:.02em;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
@@ -156,7 +157,7 @@ select{background:transparent;border:1px solid var(--ink);padding:11px 13px;
 .bar .fill{display:block;height:100%;background:var(--ink)}
 .bar.ext .fill{background:var(--gold)}
 .bar .ms{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
-.note{color:var(--ink-2);font-size:11.5px;margin:18px 0 0;line-height:1.6}
+.note{color:var(--ink-2);font-size:10.5px;margin:13px 0 0;line-height:1.5}
 .note b{color:var(--ink)}
 
 /* ---- citations: the card hover reveal ------------------------------------- */
@@ -200,27 +201,24 @@ footer a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--red
 .conf .fill,.bar .fill{transition:width .5s cubic-bezier(.16,1,.3,1)}
 @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 
-/* ---- ready-to-use question deck ------------------------------------------ */
-.try{padding:34px 0;border-bottom:1px solid var(--ink)}
-.try-group{margin-bottom:30px}
-.try-group:last-child{margin-bottom:0}
-.try-head{display:flex;align-items:baseline;gap:12px;margin-bottom:13px;flex-wrap:wrap}
-.try-note{font-size:11px;letter-spacing:.02em;color:var(--ink-2)}
-.try-note.ok{color:var(--ok)}
-.try-note.bad{color:var(--red)}
-.try-note.warn{color:var(--gold)}
-.try-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));
-  border-top:1px solid var(--ink);border-left:1px solid var(--ink)}
-.try-card{position:relative;text-align:left;background:transparent;
-  border:0;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink);
-  padding:16px 17px;display:flex;flex-direction:column;gap:12px;min-height:104px;
-  justify-content:space-between;transition:background .2s,color .2s;overflow:hidden}
-.try-card:hover{background:var(--ink);color:var(--bone)}
-.try-card.danger:hover{background:var(--red)}
-.try-card.warn:hover{background:var(--gold)}
-.try-q{font-size:14.5px;line-height:1.4;letter-spacing:-.01em}
-.try-meta{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.try-tag{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;
-  color:var(--ink-2);transition:color .2s}
-.try-card:hover .try-tag{color:rgba(255,255,255,.72)}
-.try-ms{font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* ---- compact question pills ---------------------------------------------- */
+.deck{display:flex;flex-wrap:wrap;gap:6px;padding:11px 0 12px;border-bottom:1px solid var(--ink)}
+.pq{display:inline-flex;align-items:center;gap:8px;background:transparent;
+  border:1px solid var(--line);padding:6px 11px;font-size:12.5px;color:var(--ink-2);
+  transition:background .16s,color .16s,border-color .16s;max-width:100%}
+.pq span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
+.pq em{font-style:normal;font-size:10.5px;font-weight:800;opacity:.62;
+  font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.pq:hover{background:var(--ink);color:var(--bone);border-color:var(--ink)}
+.pq.bad{border-color:rgba(232,50,30,.42);color:var(--red)}
+.pq.bad:hover{background:var(--red);color:var(--bone);border-color:var(--red)}
+.pq.warn{border-color:rgba(184,121,26,.45);color:var(--gold)}
+.pq.warn:hover{background:var(--gold);color:#fff;border-color:var(--gold)}
+
+/* Latency stays on screen while the judge reads the answer. */
+@media(min-width:961px){
+  .grid>*:last-child{position:sticky;top:14px;align-self:start}
+}
+.hero .stat-strip{gap:22px}
+.hero .stat b{font-size:22px}
