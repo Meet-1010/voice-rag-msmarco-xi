@@ -222,3 +222,27 @@ footer a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--red
 }
 .hero .stat-strip{gap:22px}
 .hero .stat b{font-size:22px}
+
+/* ---- evidence: the ablations and measurements, on the page ---------------- */
+.ev{padding:40px 0 10px;border-top:1px solid var(--ink)}
+.ev-head{display:flex;align-items:baseline;gap:14px;margin-bottom:26px;flex-wrap:wrap}
+.ev-title{margin:0;font-size:clamp(24px,3vw,38px);font-weight:800;letter-spacing:-.045em;
+  text-transform:uppercase;color:var(--ink)}
+.ev-sub{font-size:12px;color:var(--ink-2)}
+.ev-block{padding:22px 0;border-top:1px solid var(--line)}
+.ev-label{font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;
+  color:var(--red);margin-bottom:10px}
+.ev-text{margin:0 0 14px;font-size:13.5px;line-height:1.65;color:var(--ink-2);max-width:78ch}
+.ev-text b{color:var(--ink);font-weight:700}
+.ev-text:last-child{margin-bottom:0;margin-top:14px}
+.ev-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.ev-table{border-collapse:collapse;width:100%;min-width:520px;font-size:12.5px}
+.ev-table th{text-align:left;font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+  font-weight:800;color:var(--ink-2);padding:9px 12px;border-bottom:1px solid var(--ink);
+  white-space:nowrap}
+.ev-table td{padding:9px 12px;border-bottom:1px solid var(--line-2);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.ev-table td:first-child{font-variant-numeric:normal}
+.ev-table tr.win td{background:rgba(31,122,77,.09);font-weight:700}
+.ev-table tr.lose td{background:rgba(232,50,30,.07)}
+.ev-table td.hl{color:var(--red);font-weight:800}

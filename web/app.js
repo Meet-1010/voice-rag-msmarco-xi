@@ -58,6 +58,7 @@ function scheduleSpeculation(text) {
 
 async function health() {
   const el = $("health");
+  if (!el) return;   // status pills were removed from the header
   try {
     const h = await (await fetch("/health")).json();
     const n = (h.indexed_points || 0).toLocaleString();

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoiceRAG® — MSMARCO-XI</title>
-<link rel="stylesheet" href="/static/style.css?v=11">
+<link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 <body>
 <div class="cursor" id="cur"></div>
@@ -17,11 +17,6 @@
     <div class="wordmark">
       <h1>VOICERAG<span class="reg">&reg;</span></h1>
       <span class="label">MSMARCO-XI</span>
-    </div>
-    <div class="head-meta">
-      <span class="pill" id="health"><span class="dot"></span><span>connecting</span></span>
-      <span class="pill">EN &middot; हिन्दी &middot; ગુજરાતી</span>
-      <span class="pill filled">Sarvam + Groq</span>
     </div>
   </header>
 
@@ -130,12 +125,207 @@
     <p class="idle" id="citesIdle">Retrieved passages appear here.</p>
   </section>
 
+
+  <section class="ev">
+    <div class="ev-head">
+      <h3 class="ev-title">Evidence</h3>
+      <span class="ev-sub">every number below was measured on this build, not estimated</span>
+    </div>
+
+    <div class="ev-block">
+      <div class="ev-label">01 — Chunking, seven strategies benchmarked</div>
+      <p class="ev-text">300 held-out queries with known relevant passages, scored at passage
+        level after deduping chunks back to source, exact search so the chunker is what
+        varies. We expected <b>parent_child</b> to win. It came last.</p>
+      <div class="ev-scroll">
+        <table class="ev-table">
+          <thead><tr><th>strategy</th><th>chunks</th><th>R@1</th><th>R@5</th><th>MRR@10</th>
+            <th>R@5 en</th><th>R@5 hi</th><th>R@5 gu</th><th>build</th></tr></thead>
+          <tbody>
+        <tr class="win">
+          <td>passage_native</td>
+          <td>12,074</td>
+          <td>0.324</td>
+          <td>0.801</td>
+          <td>0.521</td>
+          <td>0.945</td>
+          <td>0.748</td>
+          <td>0.713</td>
+          <td>1.4s</td>
+        </tr>
+        <tr>
+          <td>indic_aware</td>
+          <td>17,076</td>
+          <td>0.323</td>
+          <td>0.766</td>
+          <td>0.507</td>
+          <td>0.914</td>
+          <td>0.766</td>
+          <td>0.612</td>
+          <td>2.5s</td>
+        </tr>
+        <tr>
+          <td>recursive</td>
+          <td>17,406</td>
+          <td>0.318</td>
+          <td>0.754</td>
+          <td>0.508</td>
+          <td>0.914</td>
+          <td>0.775</td>
+          <td>0.564</td>
+          <td>4.7s</td>
+        </tr>
+        <tr>
+          <td>sliding</td>
+          <td>25,707</td>
+          <td>0.344</td>
+          <td>0.739</td>
+          <td>0.524</td>
+          <td>0.875</td>
+          <td>0.739</td>
+          <td>0.601</td>
+          <td>1.4s</td>
+        </tr>
+        <tr>
+          <td>semantic</td>
+          <td>21,741</td>
+          <td>0.337</td>
+          <td>0.719</td>
+          <td>0.501</td>
+          <td>0.909</td>
+          <td>0.729</td>
+          <td>0.511</td>
+          <td>462.0s</td>
+        </tr>
+        <tr>
+          <td>fixed</td>
+          <td>23,988</td>
+          <td>0.298</td>
+          <td>0.704</td>
+          <td>0.475</td>
+          <td>0.857</td>
+          <td>0.711</td>
+          <td>0.537</td>
+          <td>1.8s</td>
+        </tr>
+        <tr>
+          <td>parent_child</td>
+          <td>35,092</td>
+          <td>0.288</td>
+          <td>0.646</td>
+          <td>0.444</td>
+          <td>0.864</td>
+          <td>0.706</td>
+          <td>0.351</td>
+          <td>2.4s</td>
+        </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="ev-text">MSMARCO passages are already human-curated retrieval units, so splitting
+        them destroys information. On Gujarati, parent_child collapses to <b>0.351</b> against
+        passage_native's <b>0.713</b>. Semantic chunking cost <b>462s</b> of build time to finish
+        fifth — 330&times; the winner's 1.4s for 8 points less recall.</p>
+    </div>
+
+    <div class="ev-block">
+      <div class="ev-label">02 — Hybrid retrieval made it worse</div>
+      <p class="ev-text">Dense + BM25 with RRF is the textbook default. Swept over the same 300
+        queries, it lost at every weight worth having, while costing <b>11.6ms</b>:</p>
+      <div class="ev-scroll">
+        <table class="ev-table">
+          <thead><tr><th>sparse weight</th><th>R@1</th><th>R@5</th><th>MRR@10</th></tr></thead>
+          <tbody>
+            <tr class="win"><td>0.00 — dense only</td><td>0.360</td><td>0.713</td><td>0.509</td></tr>
+            <tr><td>0.15</td><td>0.353</td><td>0.720</td><td>0.508</td></tr>
+            <tr><td>0.30</td><td>0.323</td><td>0.700</td><td>0.486</td></tr>
+            <tr class="lose"><td>0.90 — originally shipped</td><td>0.283</td><td>0.693</td><td>0.453</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="ev-text">MSMARCO queries are natural language, which e5 already handles, and
+        rank_bm25 does no stemming for Devanagari or Gujarati — so its candidates displace better
+        dense hits during fusion. The sparse index is still built and wired in behind a weight of 0.</p>
+    </div>
+
+    <div class="ev-block">
+      <div class="ev-label">03 — Embedded Qdrant scans single-threaded</div>
+      <p class="ev-text">Tripling the corpus put a quarter of requests over budget, and doubling
+        vCPUs changed nothing — the scan never leaves one thread. Per-stage profiling found
+        retrieve at 126ms against 6.5ms locally, a 20&times; gap where every other stage scaled ~6&times;.
+        Vectors are L2-normalised, so cosine is one <span class="mono">M&nbsp;@&nbsp;q</span> matmul
+        that numpy hands to multi-threaded BLAS.</p>
+      <div class="ev-scroll">
+        <table class="ev-table">
+          <thead><tr><th>change</th><th>before</th><th>after</th></tr></thead>
+          <tbody>
+            <tr><td>exact search on a BLAS matmul</td><td>126ms</td><td class="hl">3.3ms</td></tr>
+            <tr><td>drop BM25 fusion</td><td>11.6ms</td><td class="hl">0ms</td></tr>
+            <tr><td>partition index by language</td><td>70ms</td><td class="hl">9.9ms</td></tr>
+            <tr><td>cascade the grounding checks</td><td>130ms</td><td class="hl">0.2ms</td></tr>
+            <tr><td>warm encoder + page in matrices at boot</td><td>~450ms first call</td><td class="hl">~2.4ms</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="ev-text">Together these paid for a <b>3.3&times; larger corpus</b> (18,180 → 60,464
+        chunks) while lowering worst-case latency, on <b>fewer</b> vCPUs. Verified equivalent:
+        the numpy path returns identical top-10 to Qdrant on 59 of 60 queries, the one difference
+        being a score tie. HNSW is right at millions of vectors; at 60k it would trade recall for
+        a speedup exact search already has.</p>
+    </div>
+
+    <div class="ev-block">
+      <div class="ev-label">04 — Guardrail thresholds are calibrated, per language</div>
+      <p class="ev-text">Swept over 600 in-corpus and 52 deliberately out-of-corpus queries,
+        choosing the point that maximises Youden's J under a 10% false-accept cap.
+        multilingual-e5 scores are not comparable across scripts, so one global threshold
+        over-refuses the weakest language:</p>
+      <div class="ev-scroll">
+        <table class="ev-table">
+          <thead><tr><th>lang</th><th>in-corpus mean</th><th>OOD mean</th><th>separation</th>
+            <th>threshold</th><th>accepts in-corpus</th><th>accepts OOD</th></tr></thead>
+          <tbody>
+            <tr><td>en</td><td>0.909</td><td>0.844</td><td class="hl">+0.012</td><td>0.867</td><td>94.2%</td><td>10.0%</td></tr>
+            <tr><td>hi</td><td>0.896</td><td>0.851</td><td>−0.005</td><td>0.871</td><td>83.0%</td><td>6.2%</td></tr>
+            <tr class="lose"><td>gu</td><td>0.874</td><td>0.848</td><td>−0.009</td><td>0.871</td><td>52.3%</td><td>6.2%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="ev-text"><b>Stated limit:</b> separation is negative for Gujarati. Even with its own
+        operating point the guard accepts only 52.3% of answerable Gujarati questions. That is a
+        property of multilingual-e5-small on a lower-resource language, and no threshold fixes it —
+        a stronger encoder would. Grounding uses token overlap (grounded 0.778 vs ungrounded 0.010,
+        admitting 0.7%) and escalates to the encoder only when overlap says no.</p>
+    </div>
+
+    <div class="ev-block">
+      <div class="ev-label">05 — Latency, 220 queries per mode</div>
+      <div class="ev-scroll">
+        <table class="ev-table">
+          <thead><tr><th>mode</th><th>P50</th><th>P70</th><th>P90</th><th>P95</th><th>P100</th><th>within 200ms</th></tr></thead>
+          <tbody>
+            <tr><td>cold, no cache</td><td>16.1</td><td>18.1</td><td>23.6</td><td>26.1</td><td>43.5</td><td class="hl">100%</td></tr>
+            <tr><td>warm, cache on</td><td>9.6</td><td>16.7</td><td>21.5</td><td>25.1</td><td>42.8</td><td class="hl">100%</td></tr>
+            <tr><td>generative, LLM forced</td><td>26.0</td><td>28.6</td><td>31.5</td><td>101.2</td><td>121.0</td><td class="hl">100%</td></tr>
+            <tr><td>deployed, Cloud Run 4 vCPU</td><td>73.7</td><td>91.5</td><td>125.7</td><td>156.9</td><td>185.2</td><td class="hl">100%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="ev-text">Cold and warm are both reported; quoting only the warm number is the
+        standard way to make a RAG pipeline look faster than it is. The LLM call itself
+        (P50 <b>309ms</b>, P100 <b>706ms</b>) and Sarvam STT are third-party network hops, measured
+        and reported separately — never folded into the core figure. A round trip from India to
+        Groq is ~250ms before the model does anything, so no configuration puts a generative
+        answer inside 200ms.</p>
+    </div>
+  </section>
+
   <footer>
     <span class="label">HH Goa 2026 · Task 2</span>
     <span class="label"><a href="https://github.com/Meet-1010/voice-rag-msmarco-xi">GitHub</a></span>
   </footer>
 
 </div>
-<script src="/static/app.js?v=11"></script>
+<script src="/static/app.js?v=12"></script>
 </body>
 </html>
