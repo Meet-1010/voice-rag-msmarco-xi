@@ -366,8 +366,15 @@ function toggleRec() {
 }
 
 $("form").addEventListener("submit", (e) => { e.preventDefault(); askText($("q").value); });
-document.querySelectorAll(".chip").forEach((c) =>
-  c.addEventListener("click", () => { $("q").value = c.dataset.q; askText(c.dataset.q); }));
+document.querySelectorAll(".chip,.try-card").forEach((c) =>
+  c.addEventListener("click", () => {
+    // Cards carry the language their passage is indexed under; without it a
+    // Gujarati question typed into an "Auto" box can be routed by script
+    // detection alone, which is right but slower to demo.
+    if (c.dataset.lang !== undefined) $("lang").value = c.dataset.lang;
+    $("q").value = c.dataset.q;
+    askText(c.dataset.q);
+  }));
 $("mic").addEventListener("click", toggleRec);
 
 health();
