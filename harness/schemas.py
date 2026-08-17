@@ -67,6 +67,9 @@ class Timings(BaseModel):
     core_ms: float
     total_ms: float
     within_budget: bool
+    # Silence-to-answer, measured client side. The number a person actually
+    # experiences, and the one speculative retrieval is built to shrink.
+    voice_ms: float | None = None
 
 
 class Answer(BaseModel):

@@ -78,6 +78,28 @@ async def ask_voice(file: UploadFile = File(...), lang: str | None = Form(None),
     return body
 
 
+@router.post("/transcribe")
+async def transcribe(file: UploadFile = File(...), lang: str | None = Form(None)):
+    """Transcript only, no retrieval.
+
+    The frontend answers from the browser's own live transcript the moment you
+    stop speaking, then calls this to get Sarvam's authoritative version and
+    correct the displayed transcript. Sarvam's ~400ms therefore never sits
+    between the user and their answer.
+    """
+    boot()
+    if not _stt.available():
+        raise HTTPException(503, "SARVAM_API_KEY is not configured")
+    audio = await file.read()
+    if not audio:
+        raise HTTPException(400, "empty audio upload")
+    try:
+        stt = _stt.transcribe(audio, filename=file.filename or "audio.webm")
+    except RuntimeError as exc:
+        raise HTTPException(502, f"speech-to-text failed: {exc}") from exc
+    return {"transcript": stt.transcript, "lang": stt.lang, "duration_ms": stt.duration_ms}
+
+
 @router.get("/health")
 def health():
     orc = boot()
