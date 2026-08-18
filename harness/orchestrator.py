@@ -106,7 +106,7 @@ class Orchestrator:
             # One repair attempt. A second is not worth the latency; the extractive
             # fallback is already a decent answer.
             raw, provider = self.providers.complete(
-                SYSTEM, f"{user}\n\n{REPAIR}\n\nYour previous reply was:\n{raw[:500]}", timeout_s)
+                SYSTEM, f"{user}\n\n{REPAIR}\n\nYour previous reply was:\n{(raw or '')[:500]}", timeout_s)
             parsed = parse_json_answer(raw)
         if parsed is None:
             raise ProviderError("model did not return parseable JSON after repair")
@@ -278,7 +278,11 @@ class Orchestrator:
     def health(self) -> dict:
         return {
             "status": "ok",
-            "indexed_points": self.store.count(),
+            # Dense is the serving path; Qdrant may be absent from the image.
+            "indexed_points": (self.retriever.dense_index.count()
+                               if self.retriever.dense_index.available()
+                               else self.store.count()),
+            "search_backend": self.retriever.search_backend,
             "bm25_languages": sorted(self.bm25.by_lang),
             "providers": self.providers.status(),
             "cache": self.cache.stats(),

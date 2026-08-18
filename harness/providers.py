@@ -62,7 +62,13 @@ class GroqProvider(Provider):
             raise ProviderError("groq rate limited")
         if r.status_code >= 400:
             raise ProviderError(f"groq {r.status_code}: {r.text[:200]}")
-        return r.json()["choices"][0]["message"]["content"]
+        # Reasoning models return content:null when the token budget went to
+        # reasoning. Treat that as a provider failure so the chain fails over,
+        # rather than passing None downstream.
+        out = (r.json()["choices"][0]["message"] or {}).get("content")
+        if not out:
+            raise ProviderError("groq returned empty content")
+        return out
 
 
 class SarvamProvider(Provider):
@@ -94,7 +100,10 @@ class SarvamProvider(Provider):
             raise ProviderError(f"sarvam transport: {exc}") from exc
         if r.status_code >= 400:
             raise ProviderError(f"sarvam {r.status_code}: {r.text[:200]}")
-        return r.json()["choices"][0]["message"]["content"]
+        out = (r.json()["choices"][0]["message"] or {}).get("content")
+        if not out:
+            raise ProviderError("sarvam returned empty content")
+        return out
 
 
 def parse_json_answer(raw: str) -> dict | None:

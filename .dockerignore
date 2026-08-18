@@ -18,3 +18,9 @@ data/queries.jsonl
 # Only needed when sparse fusion is enabled (sparse_weight > 0); 90MB otherwise,
 # and it slows the image pull on cold start. Regenerate with index/build_index.py.
 .artifacts/chunks.jsonl
+
+# Search is served from .artifacts/dense (numpy). Qdrant is the build-time store
+# of record; at 200k points it is ~1GB of image for a read path nothing takes.
+.qdrant/
+
+data/corpus.deploy.jsonl

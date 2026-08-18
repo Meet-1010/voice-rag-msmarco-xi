@@ -28,12 +28,29 @@ class VectorStore:
         self.hnsw = sc.get("hnsw", {})
         path = Path(sc["path"])
         self.path = path if path.is_absolute() else root / path
-        self.client = QdrantClient(path=str(self.path))
+        self._client = None
+
+    @property
+    def client(self):
+        """Connect on first use.
+
+        Embedded Qdrant takes an exclusive lock on its storage folder, so
+        constructing this eagerly meant any process that merely imported the
+        orchestrator blocked every other one - including a benchmark running
+        alongside a verification. Since search moved to the dense matrices,
+        most processes never touch Qdrant at all and should not be holding
+        its lock.
+        """
+        if self._client is None:
+            self._client = QdrantClient(path=str(self.path))
+        return self._client
 
     def collection(self, lang: str) -> str:
         return f"{self.base}_{lang}"
 
     def languages(self) -> list[str]:
+        if not self.path.exists():
+            return []
         prefix = f"{self.base}_"
         return sorted(c.name[len(prefix):] for c in self.client.get_collections().collections
                       if c.name.startswith(prefix))

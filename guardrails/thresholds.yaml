@@ -1,14 +1,14 @@
 _generated_by: guardrails/calibrate.py
-_generated_at: '2026-08-16T17:26:04'
+_generated_at: '2026-08-18T21:50:55'
 _index:
   queries: queries.jsonl
   corpus: corpus.jsonl
 relevance:
-  default: 0.871
+  default: 0.864
   per_lang:
-    en: 0.867
-    gu: 0.871
-    hi: 0.871
+    en: 0.884
+    gu: 0.862
+    hi: 0.88
 grounding:
-  min_similarity: 0.804
-  min_token_overlap: 0.188
+  min_similarity: 0.803
+  min_token_overlap: 0.167

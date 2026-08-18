@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoiceRAG® — MSMARCO-XI</title>
-<link rel="stylesheet" href="/static/style.css?v=12">
+<link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
 <div class="cursor" id="cur"></div>
@@ -26,9 +26,9 @@
       <span class="word" style="animation-delay:.13s">More</span><span class="word red" style="animation-delay:.18s">signal.</span>
     </h2>
     <div class="stat-strip reveal" style="animation-delay:.3s">
-      <div class="stat"><b>60,464</b><span class="label">chunks</span></div>
+      <div class="stat"><b>202,201</b><span class="label">chunks</span></div>
       <div class="stat"><b>7</b><span class="label">chunkers</span></div>
-      <div class="stat"><b>185<span style="font-size:13px">ms</span></b><span class="label">P100 core</span></div>
+      <div class="stat"><b>42<span style="font-size:13px">ms</span></b><span class="label">P100 core</span></div>
       <div class="stat"><b>3</b><span class="label">languages</span></div>
     </div>
   </section>
@@ -267,8 +267,7 @@
           </tbody>
         </table>
       </div>
-      <p class="ev-text">Together these paid for a <b>3.3&times; larger corpus</b> (18,180 → 60,464
-        chunks) while lowering worst-case latency, on <b>fewer</b> vCPUs. Verified equivalent:
+      <p class="ev-text">Together these paid for a <b>3.3&times; larger corpus</b> (60,464 → 202,201 chunks) while lowering worst-case latency, on <b>fewer</b> vCPUs. Verified equivalent:
         the numpy path returns identical top-10 to Qdrant on 59 of 60 queries, the one difference
         being a score tie. HNSW is right at millions of vectors; at 60k it would trade recall for
         a speedup exact search already has.</p>
@@ -285,9 +284,9 @@
           <thead><tr><th>lang</th><th>in-corpus mean</th><th>OOD mean</th><th>separation</th>
             <th>threshold</th><th>accepts in-corpus</th><th>accepts OOD</th></tr></thead>
           <tbody>
-            <tr><td>en</td><td>0.909</td><td>0.844</td><td class="hl">+0.012</td><td>0.867</td><td>94.2%</td><td>10.0%</td></tr>
-            <tr><td>hi</td><td>0.896</td><td>0.851</td><td>−0.005</td><td>0.871</td><td>83.0%</td><td>6.2%</td></tr>
-            <tr class="lose"><td>gu</td><td>0.874</td><td>0.848</td><td>−0.009</td><td>0.871</td><td>52.3%</td><td>6.2%</td></tr>
+            <tr><td>en</td><td>0.907</td><td>0.853</td><td>-0.008</td><td>0.884</td><td>86.0%</td><td>10.0%</td></tr>
+            <tr class="lose"><td>gu</td><td>0.872</td><td>0.857</td><td>-0.021</td><td>0.862</td><td>76.2%</td><td>25.0%</td></tr>
+            <tr><td>hi</td><td>0.897</td><td>0.859</td><td>-0.013</td><td>0.880</td><td>72.6%</td><td>6.2%</td></tr>
           </tbody>
         </table>
       </div>
@@ -304,10 +303,9 @@
         <table class="ev-table">
           <thead><tr><th>mode</th><th>P50</th><th>P70</th><th>P90</th><th>P95</th><th>P100</th><th>within 200ms</th></tr></thead>
           <tbody>
-            <tr><td>cold, no cache</td><td>16.1</td><td>18.1</td><td>23.6</td><td>26.1</td><td>43.5</td><td class="hl">100%</td></tr>
-            <tr><td>warm, cache on</td><td>9.6</td><td>16.7</td><td>21.5</td><td>25.1</td><td>42.8</td><td class="hl">100%</td></tr>
-            <tr><td>generative, LLM forced</td><td>26.0</td><td>28.6</td><td>31.5</td><td>101.2</td><td>121.0</td><td class="hl">100%</td></tr>
-            <tr><td>deployed, Cloud Run 4 vCPU</td><td>73.7</td><td>91.5</td><td>125.7</td><td>156.9</td><td>185.2</td><td class="hl">100%</td></tr>
+            <tr><td>cold, no cache</td><td>11.83</td><td>14.59</td><td>23.56</td><td>29.48</td><td>41.57</td><td class="hl">100%</td></tr>
+            <tr><td>warm, cache on</td><td>4.18</td><td>12.05</td><td>16.89</td><td>20.67</td><td>37.88</td><td class="hl">100%</td></tr>
+            <tr><td>generative, LLM forced</td><td>15.22</td><td>15.94</td><td>16.99</td><td>17.42</td><td>17.6</td><td class="hl">100%</td></tr>
           </tbody>
         </table>
       </div>
@@ -326,6 +324,6 @@
   </footer>
 
 </div>
-<script src="/static/app.js?v=12"></script>
+<script src="/static/app.js?v=13"></script>
 </body>
 </html>

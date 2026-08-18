@@ -7,7 +7,7 @@ corpus:
     - {path: validation/gujval.parquet, lang: gu}
   # Every translation file repeats the same English passages, so take them once.
   english_from: validation/hinval.parquet
-  max_passages_per_lang: 20000
+  max_passages_per_lang: 67000
   min_passage_chars: 40
   out_dir: data
 

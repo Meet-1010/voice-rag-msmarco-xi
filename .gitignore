@@ -14,3 +14,8 @@ data/queries.jsonl
 
 .DS_Store
 .pytest_cache/
+
+# 141MB at 200k passages, over GitHub's 100MB limit and regenerable with
+# `python data/build_corpus.py`. The image ships the prebuilt index, not the corpus.
+data/corpus.deploy.jsonl
+data/queries.deploy.jsonl

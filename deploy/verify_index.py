@@ -25,11 +25,10 @@ def main() -> None:
     manifest = json.loads((ROOT / ".artifacts" / "manifest.json").read_text())
     expected = manifest["chunks"]
 
-    store = VectorStore(cfg, ROOT)
-    n_qdrant = store.count()
-    if n_qdrant != expected:
-        raise SystemExit(f"qdrant has {n_qdrant} points, manifest says {expected}")
-
+    # Dense matrices are what actually serves search, so they are the hard
+    # requirement. Qdrant is the build-time store of record and is excluded from
+    # the image at this corpus size - a 200k-point store is ~1GB of cold-start
+    # image pull for a read path nothing takes.
     dense = DenseIndex(ROOT)
     if not dense.available():
         raise SystemExit("dense matrices missing - serving search would fall back to Qdrant")
@@ -38,6 +37,15 @@ def main() -> None:
 
     if cfg["retrieval"].get("sparse_weight", 0) > 0 and not (ROOT / ".artifacts" / "bm25.pkl").exists():
         raise SystemExit("sparse_weight > 0 but bm25.pkl is missing")
+
+    # Only cross-check Qdrant when it was actually populated. An empty .qdrant
+    # directory is a normal leftover now that the store is optional, and treating
+    # its presence as a promise of content failed the build on a stale folder.
+    store = VectorStore(cfg, ROOT)
+    if store.exists():
+        n_qdrant = store.count()
+        if n_qdrant != expected:
+            raise SystemExit(f"qdrant has {n_qdrant} points, manifest says {expected}")
 
     print(f"index verified: {expected:,} chunks, langs={dense.languages()}, "
           f"strategy={manifest['strategy']}, search=numpy")

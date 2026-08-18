@@ -6,26 +6,27 @@ Thresholds below are measured, not chosen by feel. Regenerate with `python guard
 
 - In-corpus queries: 600, out-of-corpus: 52
 - In-corpus top dense score: mean 0.893, p05 0.854
-- Out-of-corpus top dense score: mean 0.847, p95 0.879
-- **Chosen threshold 0.871** -> accepts 76.5% of in-corpus queries, 7.7% of out-of-corpus queries
+- Out-of-corpus top dense score: mean 0.856, p95 0.898
+- **Chosen threshold 0.864** -> accepts 85.0% of in-corpus queries, 25.0% of out-of-corpus queries
 
 Operating point favours refusing over answering: a wrong answer to an out-of-corpus question is worse than an unnecessary refusal.
 
 | Threshold | Accepts in-corpus (TPR) | Accepts out-of-corpus (FPR) |
 |---|---|---|
-| 0.778 | 100.0% | 100.0% |
-| 0.834 | 99.3% | 78.8% |
-| 0.846 | 98.3% | 50.0% |
-| 0.857 | 92.3% | 26.9% |
-| 0.867 | 80.3% | 11.5% |
-| 0.877 | 68.7% | 5.8% |
-| 0.887 | 57.7% | 3.8% |
-| 0.897 | 45.2% | 3.8% |
-| 0.907 | 32.0% | 0.0% |
-| 0.917 | 20.7% | 0.0% |
-| 0.927 | 10.5% | 0.0% |
-| 0.937 | 3.7% | 0.0% |
-| 0.949 | 0.8% | 0.0% |
+| 0.782 | 100.0% | 100.0% |
+| 0.840 | 99.2% | 73.1% |
+| 0.849 | 97.7% | 55.8% |
+| 0.858 | 91.7% | 40.4% |
+| 0.867 | 81.0% | 25.0% |
+| 0.876 | 68.8% | 15.4% |
+| 0.885 | 58.8% | 7.7% |
+| 0.894 | 48.8% | 7.7% |
+| 0.903 | 37.2% | 3.8% |
+| 0.912 | 27.7% | 3.8% |
+| 0.921 | 15.5% | 1.9% |
+| 0.930 | 8.5% | 1.9% |
+| 0.939 | 2.8% | 1.9% |
+| 0.959 | 0.0% | 0.0% |
 
 ### Per-language thresholds
 
@@ -33,9 +34,9 @@ multilingual-e5 scores are not comparable across scripts. In-corpus English quer
 
 | Lang | In-corpus mean | In p10 | OOD mean | OOD p90 | Separation | Threshold | TPR | FPR |
 |---|---|---|---|---|---|---|---|---|
-| en | 0.909 | 0.881 | 0.844 | 0.868 | +0.012 | **0.867** | 94.2% | 10.0% |
-| gu | 0.874 | 0.856 | 0.848 | 0.865 | -0.009 | **0.871** | 52.3% | 6.2% |
-| hi | 0.896 | 0.860 | 0.851 | 0.865 | -0.005 | **0.871** | 83.0% | 6.2% |
+| en | 0.907 | 0.878 | 0.853 | 0.885 | -0.008 | **0.884** | 86.0% | 10.0% |
+| gu | 0.872 | 0.855 | 0.857 | 0.876 | -0.021 | **0.862** | 76.2% | 25.0% |
+| hi | 0.897 | 0.862 | 0.859 | 0.875 | -0.013 | **0.880** | 72.6% | 6.2% |
 
 `Separation` is in-corpus p10 minus out-of-corpus p90: positive means the two distributions are cleanly apart at those quantiles. It is comfortably positive for English and negative for Gujarati, which is the honest limit of this guard on the lowest-resource language rather than something to paper over.
 
@@ -44,7 +45,7 @@ multilingual-e5 scores are not comparable across scripts. In-corpus English quer
 
 Built from 300 answer/passage pairs. Positives pair each gold answer with the passage it came from; negatives pair the same answer with a random unrelated passage.
 
-- Embedding similarity: grounded mean 0.905 vs ungrounded 0.746 -> **threshold 0.804** (keeps 94.3% of grounded, admits 2.7% of ungrounded)
-- Token overlap: grounded mean 0.809 vs ungrounded 0.018 -> **threshold 0.188** (keeps 96.7%, admits 2.3%)
+- Embedding similarity: grounded mean 0.910 vs ungrounded 0.740 -> **threshold 0.803** (keeps 98.0% of grounded, admits 2.7% of ungrounded)
+- Token overlap: grounded mean 0.806 vs ungrounded 0.012 -> **threshold 0.167** (keeps 98.7%, admits 0.7%)
 
 An answer must clear both. They fail differently: similarity catches an answer that wandered off topic, overlap catches fluent text that invented specifics the passage never contained.

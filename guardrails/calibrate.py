@@ -40,16 +40,21 @@ from retrieval.hybrid import HybridRetriever  # noqa: E402
 # is the worse failure, yet a guard that refuses half of all answerable questions
 # is not "safe", it is broken. We cap false-accepts here and then balance.
 TARGET_FPR = 0.10
+# A guard that refuses most answerable questions is not safe, it is broken. At
+# 200k passages the classes overlap enough that an FPR-only cap drove Gujarati to
+# 29.8% acceptance - it refused two thirds of questions it could answer. So the
+# floor is a hard constraint and the false-accept rate is what gives.
+MIN_TPR = 0.65
 
 
-def sweep(pos: np.ndarray, neg: np.ndarray, target_fpr: float = TARGET_FPR):
+def sweep(pos: np.ndarray, neg: np.ndarray, target_fpr: float = TARGET_FPR,
+          min_tpr: float = MIN_TPR):
     """Return (chosen_threshold, rows).
 
-    Among thresholds holding false-accepts at or under target_fpr, take the one
-    maximising Youden's J. Maximising TPR instead - the obvious first choice -
-    degenerates whenever the two classes separate cleanly: every threshold in the
-    gap satisfies the FPR cap, so it returns the lowest one, which sits at the
-    very bottom of the gap and filters almost nothing.
+    Prefer the FPR cap, but never at the cost of falling below min_tpr. Among the
+    candidates, take the one maximising Youden's J - maximising TPR instead
+    degenerates whenever the classes separate cleanly, returning the very bottom
+    of the gap where the threshold filters almost nothing.
     """
     grid = np.unique(np.round(np.concatenate([pos, neg]), 3))
     rows = []
@@ -58,7 +63,9 @@ def sweep(pos: np.ndarray, neg: np.ndarray, target_fpr: float = TARGET_FPR):
         fpr = float((neg >= t).mean())
         rows.append({"threshold": float(t), "tpr": tpr, "fpr": fpr, "youden": tpr - fpr})
 
-    pool = [r for r in rows if r["fpr"] <= target_fpr] or rows
+    pool = [r for r in rows if r["fpr"] <= target_fpr and r["tpr"] >= min_tpr]
+    if not pool:                                  # cap and floor cannot both hold
+        pool = [r for r in rows if r["tpr"] >= min_tpr] or rows
     best = max(pool, key=lambda r: (round(r["youden"], 4), -r["threshold"]))
     return best, rows
 
@@ -247,7 +254,8 @@ def main() -> None:
             raise SystemExit(f"missing {p}")
     embedder = Embedder(cfg["embedder"])
     store = VectorStore(cfg, ROOT)
-    if not store.exists():
+    from index.dense import DenseIndex
+    if not DenseIndex(ROOT).available() and not store.exists():
         raise SystemExit("no index found - run index/build_index.py first")
     bm_path = ROOT / ".artifacts" / "bm25.pkl"
     bm25 = BM25Index.load(bm_path) if bm_path.exists() else BM25Index()

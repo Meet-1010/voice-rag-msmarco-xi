@@ -233,7 +233,8 @@ def main() -> None:
 
     orc = Orchestrator()
     print("providers:", orc.providers.status())
-    print(f"index: {orc.store.count():,} points")
+    print(f"index: {orc.health()['indexed_points']:,} points "
+          f"({orc.retriever.search_backend})")
 
     warm_q = load_queries(WARMUP, args.seed + 999, path=qfile)
     print(f"warming up ({WARMUP} runs, discarded) ...")
