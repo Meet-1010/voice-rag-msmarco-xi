@@ -7,7 +7,7 @@ Thresholds below are measured, not chosen by feel. Regenerate with `python guard
 - In-corpus queries: 600, out-of-corpus: 52
 - In-corpus top dense score: mean 0.893, p05 0.854
 - Out-of-corpus top dense score: mean 0.856, p95 0.898
-- **Chosen threshold 0.864** -> accepts 85.0% of in-corpus queries, 25.0% of out-of-corpus queries
+- **Chosen threshold 0.884** -> accepts 59.5% of in-corpus queries, 7.7% of out-of-corpus queries
 
 Operating point favours refusing over answering: a wrong answer to an out-of-corpus question is worse than an unnecessary refusal.
 
@@ -35,7 +35,7 @@ multilingual-e5 scores are not comparable across scripts. In-corpus English quer
 | Lang | In-corpus mean | In p10 | OOD mean | OOD p90 | Separation | Threshold | TPR | FPR |
 |---|---|---|---|---|---|---|---|---|
 | en | 0.907 | 0.878 | 0.853 | 0.885 | -0.008 | **0.884** | 86.0% | 10.0% |
-| gu | 0.872 | 0.855 | 0.857 | 0.876 | -0.021 | **0.862** | 76.2% | 25.0% |
+| gu | 0.872 | 0.855 | 0.857 | 0.876 | -0.021 | **0.877** | 29.8% | 6.2% |
 | hi | 0.897 | 0.862 | 0.859 | 0.875 | -0.013 | **0.880** | 72.6% | 6.2% |
 
 `Separation` is in-corpus p10 minus out-of-corpus p90: positive means the two distributions are cleanly apart at those quantiles. It is comfortably positive for English and negative for Gujarati, which is the honest limit of this guard on the lowest-resource language rather than something to paper over.

@@ -40,11 +40,14 @@ from retrieval.hybrid import HybridRetriever  # noqa: E402
 # is the worse failure, yet a guard that refuses half of all answerable questions
 # is not "safe", it is broken. We cap false-accepts here and then balance.
 TARGET_FPR = 0.10
-# A guard that refuses most answerable questions is not safe, it is broken. At
-# 200k passages the classes overlap enough that an FPR-only cap drove Gujarati to
-# 29.8% acceptance - it refused two thirds of questions it could answer. So the
-# floor is a hard constraint and the false-accept rate is what gives.
-MIN_TPR = 0.65
+# Flooring TPR was tried and reverted. At 200k the classes overlap badly enough in
+# Gujarati (separation -0.021) that guaranteeing 65% acceptance pushed false
+# accepts to 25%, and 3 of 5 out-of-corpus Gujarati questions started being
+# answered - which breaks the requirement the guard exists to satisfy. Under-
+# refusing is a correctness failure; over-refusing is a usability one, and the
+# general-knowledge fallback already covers usability when Strict RAG is off.
+# So the cap governs and TPR is what gives.
+MIN_TPR = 0.0
 
 
 def sweep(pos: np.ndarray, neg: np.ndarray, target_fpr: float = TARGET_FPR,
